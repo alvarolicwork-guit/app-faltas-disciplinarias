@@ -1,0 +1,145 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadId", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadId", "order": "ASCENDING" },
+        { "fieldPath": "articulo", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "personalId", "order": "ASCENDING" },
+        { "fieldPath": "articulo", "order": "ASCENDING" },
+        { "fieldPath": "inciso", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "articulo", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "inciso", "order": "ASCENDING" },
+        { "fieldPath": "personalId", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "personalId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoRegistro", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "personal",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadId", "order": "ASCENDING" },
+        { "fieldPath": "grado", "order": "ASCENDING" },
+        { "fieldPath": "nombreCompleto", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "unidadId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "solicitudes_eliminacion_falta",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "solicitudes_eliminacion_falta",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "solicitanteUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reincidencias_bloqueadas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reincidencias_bloqueadas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "unidadIntentoId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reincidencias_bloqueadas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "personalId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reincidencias_bloqueadas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "articuloIntentado", "order": "ASCENDING" },
+        { "fieldPath": "incisoIntentado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
