@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { Card, Badge, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useUnidades } from "@/hooks/use-unidades";
 import { USER_ROLES } from "@/lib/domain/constants";
@@ -29,7 +30,8 @@ type UserRow = {
 };
 
 export function UsuariosPage() {
-  const { get, post, patch } = useApi();
+  const { get, post, patch, del } = useApi();
+  const { sessionUser } = useAuth();
   const { unitOptions, getUnitName } = useUnidades();
   const toast = useToast();
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -39,6 +41,10 @@ export function UsuariosPage() {
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [handoverOpen, setHandoverOpen] = useState(false);
   const [handoverBusy, setHandoverBusy] = useState(false);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [deactivateBusy, setDeactivateBusy] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<UserRow | null>(null);
+  const [deactivateReason, setDeactivateReason] = useState("");
 
   const [handover, setHandover] = useState({
     unidadId: "",
@@ -125,6 +131,19 @@ export function UsuariosPage() {
     setHandoverOpen(true);
   }
 
+  function openDeactivate(user: UserRow) {
+    setDeactivateTarget(user);
+    setDeactivateReason("");
+    setDeactivateOpen(true);
+  }
+
+  function closeDeactivate() {
+    setDeactivateOpen(false);
+    setDeactivateBusy(false);
+    setDeactivateTarget(null);
+    setDeactivateReason("");
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -207,9 +226,33 @@ export function UsuariosPage() {
     }
   }
 
+  async function handleDeactivate() {
+    if (!deactivateTarget) return;
+
+    if (deactivateReason.trim().length < 10) {
+      toast.warning("El motivo de baja debe tener al menos 10 caracteres");
+      return;
+    }
+
+    setDeactivateBusy(true);
+    try {
+      await del(`/api/users?uid=${deactivateTarget.uid}`, {
+        reason: deactivateReason.trim(),
+      });
+      toast.success("Usuario dado de baja", "El acceso fue deshabilitado y sus sesiones fueron revocadas.");
+      closeDeactivate();
+      fetchUsers();
+    } catch (err) {
+      toast.error("Error", err instanceof Error ? err.message : "No se pudo dar de baja el usuario");
+    } finally {
+      setDeactivateBusy(false);
+    }
+  }
+
   const roleOptions = USER_ROLES.map((r) => ({ value: r, label: r.replace(/_/g, " ") }));
   const rankOptions = RANGOS_POLICIALES.map((rank) => ({ value: rank, label: rank }));
   const needsUnit = form.role === "operador_unidad" || form.role === "admin_unidad";
+  const isSuperAdmin = sessionUser?.role === "super_admin";
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -254,10 +297,23 @@ export function UsuariosPage() {
                     </td>
                     <td className="px-4 py-3 text-[var(--navy-600)] max-w-[200px] truncate">{u.unidadNombre ?? "Global"}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={u.status === "activo" ? "success" : "warning"}>{u.status ?? "activo"}</Badge>
+                      <Badge variant={u.status === "activo" ? "success" : u.status === "baja" ? "default" : "warning"}>{u.status ?? "activo"}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} icon={Icons.edit({ size: 14 })}>Editar</Button>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)} icon={Icons.edit({ size: 14 })}>Editar</Button>
+                        {isSuperAdmin && u.uid !== sessionUser?.uid && u.status !== "baja" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeactivate(u)}
+                            icon={Icons.alertTriangle({ size: 14 })}
+                            className="text-[var(--danger-600)] hover:text-[var(--danger-600)] hover:bg-[var(--danger-50)]"
+                          >
+                            Dar de baja
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -353,6 +409,56 @@ export function UsuariosPage() {
             Al confirmar, la cuenta saliente quedará bloqueada y sus sesiones serán revocadas por seguridad.
           </p>
         </form>
+      </Modal>
+
+      <Modal
+        open={deactivateOpen}
+        onClose={closeDeactivate}
+        title="Dar de baja usuario"
+        footer={
+          <>
+            <Button variant="outline" onClick={closeDeactivate} disabled={deactivateBusy}>Cancelar</Button>
+            <Button
+              variant="danger"
+              onClick={() => { void handleDeactivate(); }}
+              loading={deactivateBusy}
+              disabled={deactivateReason.trim().length < 10}
+            >
+              Confirmar baja
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[var(--danger-100)] bg-[var(--danger-50)] p-3">
+            <p className="text-sm font-semibold text-[var(--danger-600)]">
+              Esta acción quitará el acceso del usuario.
+            </p>
+            <p className="mt-1 text-xs text-[var(--danger-600)]">
+              La cuenta quedará deshabilitada, sus sesiones serán revocadas y el historial se conservará para auditoría.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--navy-50)] p-3">
+            <p className="text-xs text-[var(--navy-400)]">Usuario</p>
+            <p className="text-sm font-semibold text-[var(--navy-900)]">
+              {deactivateTarget?.nombreCompleto ?? deactivateTarget?.displayName ?? "Sin nombre"}
+            </p>
+            <p className="text-xs text-[var(--navy-600)]">{deactivateTarget?.email}</p>
+            <p className="mt-1 text-xs text-[var(--navy-500)]">
+              Rol: {deactivateTarget?.role?.replace(/_/g, " ")} | Unidad: {deactivateTarget?.unidadNombre ?? "Global"}
+            </p>
+          </div>
+
+          <Textarea
+            label="Motivo de baja"
+            value={deactivateReason}
+            onChange={(e) => setDeactivateReason(e.target.value)}
+            placeholder="Ej.: Cambio de destino, baja administrativa o corrección de cuenta..."
+            rows={4}
+            error={deactivateReason.trim().length > 0 && deactivateReason.trim().length < 10 ? "Mínimo 10 caracteres" : undefined}
+          />
+        </div>
       </Modal>
 
       <Modal

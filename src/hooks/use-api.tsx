@@ -53,7 +53,11 @@ export function useApi() {
   );
 
   const del = useCallback(
-    <T = unknown>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+    <T = unknown>(path: string, body?: unknown) =>
+      apiFetch<T>(path, {
+        method: "DELETE",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
     [apiFetch],
   );
 

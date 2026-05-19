@@ -267,3 +267,96 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Error al actualizar usuario" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const actor = await getRequestUser(request);
+    if (!actor) return unauthorized();
+    if (actor.role !== "super_admin") {
+      return forbidden("Solo super_admin puede dar de baja usuarios");
+    }
+
+    const uid = request.nextUrl.searchParams.get("uid")?.trim();
+    if (!uid) return NextResponse.json({ error: "uid requerido" }, { status: 400 });
+    if (uid === actor.uid) {
+      return NextResponse.json(
+        { error: "No puede dar de baja su propia cuenta" },
+        { status: 400 },
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const reason = normalizeWhitespace(String(body?.reason ?? ""));
+    if (reason.length < 10) {
+      return NextResponse.json(
+        { error: "Debe registrar un motivo de baja de al menos 10 caracteres" },
+        { status: 400 },
+      );
+    }
+
+    const db = getAdminDb();
+    const userRef = db.collection("users").doc(uid);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) {
+      return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+    }
+
+    const before = userSnap.data()!;
+    if (normalizeStatus(before.status) === "baja") {
+      return NextResponse.json({ error: "El usuario ya se encuentra en baja" }, { status: 400 });
+    }
+
+    if (before.role === "super_admin") {
+      const superAdminsSnap = await db
+        .collection("users")
+        .where("role", "==", "super_admin")
+        .where("status", "==", "activo")
+        .limit(2)
+        .get();
+
+      const activeSuperAdmins = superAdminsSnap.docs.filter((doc) => doc.id !== uid);
+      if (activeSuperAdmins.length === 0) {
+        return NextResponse.json(
+          { error: "No se puede dar de baja al ultimo super_admin activo" },
+          { status: 400 },
+        );
+      }
+    }
+
+    const now = Timestamp.now();
+    const updates = {
+      status: "baja",
+      isActive: false,
+      deletedAt: now,
+      deletedBy: {
+        uid: actor.uid,
+        email: actor.email,
+        role: actor.role,
+      },
+      deleteReason: reason,
+      updatedAt: now,
+    };
+
+    await userRef.update(updates);
+
+    const auth = getAdminAuth();
+    await auth.updateUser(uid, { disabled: true });
+    await auth.revokeRefreshTokens(uid);
+
+    await db.collection("audit_logs").add({
+      actorUid: actor.uid,
+      actorEmail: actor.email,
+      actorRole: actor.role,
+      action: "delete_user_access",
+      entity: "user",
+      entityId: uid,
+      before,
+      after: { ...before, ...updates },
+      createdAt: now,
+    });
+
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch {
+    return NextResponse.json({ error: "No se pudo dar de baja el usuario" }, { status: 500 });
+  }
+}
