@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
       query = query.where("fechaSancion", "<=", Timestamp.fromDate(end));
     }
 
+    query = query.orderBy("fechaSancion", "desc");
+
     const snap = await query.get();
     const allFaltas = snap.docs.map((d) => d.data());
 
@@ -77,7 +79,24 @@ export async function GET(request: NextRequest) {
       porArticulo,
       porUnidad,
     });
-  } catch {
+  } catch (error) {
+    console.error("GET /api/reportes failed", {
+      error,
+      message: error instanceof Error ? error.message : "unknown_error",
+      code: (error as { code?: string })?.code ?? null,
+    });
+
+    const firestoreCode = (error as { code?: string })?.code;
+    if (firestoreCode === "failed-precondition") {
+      return NextResponse.json(
+        {
+          error: "Indice Firestore faltante para generar reportes",
+          details: error instanceof Error ? error.message : "unknown_error",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({ error: "Error al generar reporte" }, { status: 500 });
   }
 }

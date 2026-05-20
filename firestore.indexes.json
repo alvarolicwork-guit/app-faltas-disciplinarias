@@ -60,6 +60,14 @@
       "collectionGroup": "faltas",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "personalId", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "fechaSancion", "order": "DESCENDING" }

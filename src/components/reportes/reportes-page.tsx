@@ -34,11 +34,13 @@ export function ReportesPage() {
   const [fechaFin, setFechaFin] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReporteData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const unitOptions = [{ value: "", label: "Todas las unidades" }, ...rawUnitOptions];
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (unidadId) params.set("unidadId", unidadId);
@@ -46,8 +48,12 @@ export function ReportesPage() {
       params.set("fechaFin", fechaFin);
       const res = await get<ReporteData>(`/api/reportes?${params}`);
       setData(res);
-    } catch { /* silent */ }
-    finally { setLoading(false); }
+    } catch (err) {
+      setData(null);
+      setError(err instanceof Error ? err.message : "No se pudo generar el reporte");
+    } finally {
+      setLoading(false);
+    }
   }, [get, unidadId, fechaInicio, fechaFin]);
 
   return (
@@ -68,6 +74,18 @@ export function ReportesPage() {
       </Card>
 
       {loading && <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}</div>}
+
+      {error && !loading && (
+        <Card className="p-5 border-[var(--danger-100)] bg-[var(--danger-50)]">
+          <div className="flex items-start gap-3">
+            <div className="text-[var(--danger-600)]">{Icons.alertTriangle({ size: 20 })}</div>
+            <div>
+              <p className="text-sm font-semibold text-[var(--danger-600)]">No se pudo generar el reporte.</p>
+              <p className="mt-1 text-sm text-[var(--danger-600)]">{error}</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {data && !loading && (
         <>
