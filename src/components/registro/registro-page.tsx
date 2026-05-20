@@ -468,7 +468,7 @@ export function RegistroPage() {
                 onChange={(e) => selectOrigen(e.target.value)}
                 options={origenRows.map((row) => ({
                   value: row.id,
-                  label: `${row.fechaSancion ?? ""} | ${row.articulo.split(" - ")[0]} | ${row.inciso} | ${row.memorandum}`,
+                  label: `${row.fechaSancion ?? ""} | ${row.articulo.split(" - ")[0]} | ${row.inciso} | Memo ${row.memorandum} | Unidad: ${row.unidadSancionNombre ?? row.unidadNombre ?? "N/A"}`,
                 }))}
                 placeholder={origenLoading ? "Cargando faltas previas..." : "Seleccionar falta previa"}
                 disabled={origenLoading || origenRows.length === 0}
