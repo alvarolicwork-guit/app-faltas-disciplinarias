@@ -118,8 +118,8 @@ export function SolicitudesPage() {
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de Eliminación</h3>
-            <p className="text-sm text-[var(--navy-500)]">Bandeja departamental para resolver sanciones erróneas.</p>
+            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes para Dejar sin Efecto</h3>
+            <p className="text-sm text-[var(--navy-500)]">Bandeja departamental para resolver solicitudes sobre sanciones disciplinarias.</p>
           </div>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
             {(["pendiente", "aprobada", "rechazada"] as const).map((status) => (
@@ -196,7 +196,7 @@ export function SolicitudesPage() {
               loading={!!busyId}
               disabled={resolveReason.trim().length < 6}
             >
-              {resolveDecision === "aprobada" ? "Aprobar y anular sanción" : "Confirmar rechazo"}
+              {resolveDecision === "aprobada" ? "Aprobar y dejar sin efecto" : "Confirmar rechazo"}
             </Button>
           </>
         )}
@@ -218,7 +218,7 @@ export function SolicitudesPage() {
           </div>
 
           <Textarea
-            label={resolveDecision === "aprobada" ? "Motivo de aprobación / anulación" : "Motivo de rechazo"}
+            label={resolveDecision === "aprobada" ? "Motivo de aprobación para dejar sin efecto" : "Motivo de rechazo"}
             placeholder={resolveDecision === "aprobada" ? "Describa el fundamento de la aprobación..." : "Describa el fundamento del rechazo..."}
             rows={4}
             value={resolveReason}

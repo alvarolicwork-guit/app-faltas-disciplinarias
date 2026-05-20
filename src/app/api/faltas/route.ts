@@ -555,7 +555,7 @@ export async function DELETE(request: NextRequest) {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
     if (!USER_ROLES_GLOBAL.has(actor.role)) {
-      return forbidden("Solo admin_dpto o super_admin pueden anular sanciones");
+      return forbidden("Solo admin_dpto o super_admin pueden dejar sin efecto sanciones");
     }
 
     const faltaId = request.nextUrl.searchParams.get("id")?.trim();
@@ -564,7 +564,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!faltaId) return badRequest("id de falta requerido");
     if (!motivoEliminacion || motivoEliminacion.length < 6) {
-      return badRequest("motivo de anulación requerido (mínimo 6 caracteres)");
+      return badRequest("motivo para dejar sin efecto requerido (mínimo 6 caracteres)");
     }
 
     const adminDb = getAdminDb();
@@ -631,6 +631,6 @@ export async function DELETE(request: NextRequest) {
       if (error.message === "FALTA_NOT_FOUND") return badRequest("Falta no encontrada");
       if (error.message === "FALTA_ALREADY_ANULADA") return badRequest("La falta ya está anulada");
     }
-    return NextResponse.json({ error: "No se pudo anular la falta" }, { status: 500 });
+    return NextResponse.json({ error: "No se pudo dejar sin efecto la falta" }, { status: 500 });
   }
 }

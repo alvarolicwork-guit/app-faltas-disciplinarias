@@ -27,7 +27,7 @@ const tabs: NavTab[] = [
   { key: "unidades", label: "Unidades", icon: Icons.building, requiresGlobal: true },
   { key: "reportes", label: "Reportes", icon: Icons.reportes },
   { key: "transferencias", label: "Traspasos", icon: Icons.historial, requiresGlobal: true },
-  { key: "solicitudes", label: "Solicitudes", icon: Icons.alertTriangle, requiresGlobal: true },
+  { key: "solicitudes", label: "Sin efecto", icon: Icons.alertTriangle, requiresGlobal: true },
 ];
 
 export function MobileNav({ activeModule, onNavigate }: MobileNavProps) {

@@ -31,7 +31,7 @@ const navItems: NavItem[] = [
   { key: "importacion", label: "Importar Personal", icon: Icons.importar, requiredRole: isGlobalRole },
   { key: "reportes", label: "Reportes", icon: Icons.reportes },
   { key: "transferencias", label: "Auditoría Traspasos", icon: Icons.historial, requiredRole: isGlobalRole },
-  { key: "solicitudes", label: "Solicitudes Baja", icon: Icons.alertTriangle, requiredRole: isGlobalRole },
+  { key: "solicitudes", label: "Dejar sin Efecto", icon: Icons.alertTriangle, requiredRole: isGlobalRole },
 ];
 
 export function Sidebar({ activeModule, onNavigate, collapsed = false }: SidebarProps) {

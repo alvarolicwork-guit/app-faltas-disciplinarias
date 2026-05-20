@@ -81,7 +81,7 @@ export async function PATCH(
             motivoEliminacion:
               typeof solicitud.motivo === "string" && solicitud.motivo.trim().length > 0
                 ? solicitud.motivo
-                : "Eliminación por solicitud disciplinaria",
+                : "Dejada sin efecto por solicitud disciplinaria",
             tipoSolicitud: solicitud.tipoSolicitud ?? null,
             memorandumRepresentacion: solicitud.memorandumRepresentacion ?? null,
             comentarioSolicitud: solicitud.comentario ?? null,

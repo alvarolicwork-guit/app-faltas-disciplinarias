@@ -308,6 +308,10 @@ export function HistorialPage() {
     return <Badge variant="info">Art. 9</Badge>;
   }
 
+  function getEstadoLabel(estado?: "registrada" | "anulada") {
+    return estado === "anulada" ? "sin efecto" : "registrada";
+  }
+
   function openRequestModal(row: Falta) {
     setRequestTarget(row);
     setRequestType("representacion");
@@ -516,7 +520,7 @@ export function HistorialPage() {
                   onClick={() => setEstadoFilter(estado)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${estadoFilter === estado ? "bg-white shadow-sm text-[var(--navy-900)]" : "text-[var(--navy-500)]"}`}
                 >
-                  {estado}
+                  {estado === "anulada" ? "sin efecto" : estado}
                 </button>
               ))}
               <button type="button" onClick={() => setViewMode("table")} className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${viewMode === "table" ? "bg-white shadow-sm text-[var(--navy-900)]" : "text-[var(--navy-500)]"}`}>Tabla</button>
@@ -578,7 +582,7 @@ export function HistorialPage() {
                       {showUnitColumn && <td className="px-4 py-3 text-[var(--navy-600)]">{row.unidadSancionNombre ?? row.unidadNombre ?? "-"}</td>}
                       <td className="px-4 py-3 text-[var(--navy-600)]">{row.memorandum}</td>
                       <td className="px-4 py-3">
-                        <Badge variant={row.estado === "anulada" ? "default" : "success"}>{row.estado ?? "registrada"}</Badge>
+                        <Badge variant={row.estado === "anulada" ? "default" : "success"}>{getEstadoLabel(row.estado)}</Badge>
                       </td>
                       <td className="px-4 py-3">
                         <Button variant="ghost" size="sm" icon={Icons.eye({ size: 14 })} onClick={(e) => { e.stopPropagation(); setSelectedFalta(row); }}>
@@ -595,7 +599,7 @@ export function HistorialPage() {
                               openRequestModal(row);
                             }}
                           >
-                            {pendingRequestIds.has(row.id) ? "Solicitud enviada" : "Solicitar Baja"}
+                            {pendingRequestIds.has(row.id) ? "Solicitud enviada" : "Dejar sin efecto"}
                           </Button>
                         )}
                       </td>
@@ -623,7 +627,7 @@ export function HistorialPage() {
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     <div><p className="text-[10px] text-[var(--navy-400)]">Fecha</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.fechaSancion}</p></div>
                     <div><p className="text-[10px] text-[var(--navy-400)]">Memorandum</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.memorandum}</p></div>
-                    <div><p className="text-[10px] text-[var(--navy-400)]">Estado</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.estado ?? "registrada"}</p></div>
+                    <div><p className="text-[10px] text-[var(--navy-400)]">Estado</p><p className="text-xs font-medium text-[var(--navy-700)]">{getEstadoLabel(row.estado)}</p></div>
                     {showUnitColumn && <div><p className="text-[10px] text-[var(--navy-400)]">Unidad</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.unidadSancionNombre ?? row.unidadNombre ?? "-"}</p></div>}
                   </div>
                 </button>
@@ -636,7 +640,7 @@ export function HistorialPage() {
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de Baja/Eliminacion</h3>
+            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes para Dejar sin Efecto</h3>
             <p className="text-sm text-[var(--navy-500)]">Seguimiento de solicitudes pendientes y aceptadas.</p>
           </div>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
@@ -694,7 +698,7 @@ export function HistorialPage() {
       <Modal
         open={requestModalOpen}
         onClose={closeRequestModal}
-        title="Solicitar baja o eliminacion de sancion"
+        title="Solicitar dejar sin efecto la sancion"
         size="md"
         footer={(
           <>

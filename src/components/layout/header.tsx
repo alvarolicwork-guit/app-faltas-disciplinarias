@@ -14,7 +14,7 @@ const titles: Record<ModuleKey, string> = {
   importacion: "Importar Personal",
   reportes: "Reportes Estadísticos",
   transferencias: "Auditoría de Traspasos",
-  solicitudes: "Solicitudes de Baja",
+  solicitudes: "Dejar sin Efecto",
 };
 
 type HeaderProps = {
