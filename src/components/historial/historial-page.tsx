@@ -22,6 +22,7 @@ type Falta = {
   memorandum: string;
   motivo?: string;
   unidadSancionNombre?: string;
+  unidadNombre?: string;
   reincidencia?: boolean;
   tipoRegistro?: string;
   reincidenciaOrigen?: {
@@ -34,6 +35,16 @@ type Falta = {
   } | null;
   registradoPor?: string;
   estado?: "registrada" | "anulada";
+};
+
+type PersonalResumen = {
+  id: string;
+  ci: string;
+  grado?: string;
+  nombreCompleto: string;
+  unidadId?: string;
+  unidadNombre?: string;
+  estado?: string;
 };
 
 type SolicitudResumen = {
@@ -53,13 +64,23 @@ type SolicitudResumen = {
   };
 };
 
+type HistoryScope = "unit" | "person";
+type EstadoFilter = "registrada" | "anulada" | "todas";
+
 export function HistorialPage() {
   const { get, post } = useApi();
   const { sessionUser } = useAuth();
   const { unidades, getUnitName } = useUnidades();
   const toast = useToast();
 
+  const [historyScope, setHistoryScope] = useState<HistoryScope>("unit");
   const [selectedUnitId, setSelectedUnitId] = useState("");
+  const [selectedPersonal, setSelectedPersonal] = useState<PersonalResumen | null>(null);
+  const [personalSearchText, setPersonalSearchText] = useState("");
+  const [personalResults, setPersonalResults] = useState<PersonalResumen[]>([]);
+  const [personalLoading, setPersonalLoading] = useState(false);
+  const [personalError, setPersonalError] = useState<string | null>(null);
+
   const [faltasRows, setFaltasRows] = useState<Falta[]>([]);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,7 +89,7 @@ export function HistorialPage() {
   const faltasCacheRef = useRef<Map<string, Falta[]>>(new Map());
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [selectedFalta, setSelectedFalta] = useState<Falta | null>(null);
-  const [estadoFilter, setEstadoFilter] = useState<"registrada" | "anulada" | "todas">("registrada");
+  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("registrada");
   const [pendingRequestIds, setPendingRequestIds] = useState<Set<string>>(new Set());
   const [solicitudesRows, setSolicitudesRows] = useState<SolicitudResumen[]>([]);
   const [solicitudesFilter, setSolicitudesFilter] = useState<"pendiente" | "aprobada">("pendiente");
@@ -81,22 +102,28 @@ export function HistorialPage() {
   const [requestSubmitting, setRequestSubmitting] = useState(false);
 
   const canSelectUnit = sessionUser ? !isUnitScopedRole(sessionUser.role) : false;
-  const canRequestDeletion = sessionUser ? isUnitScopedRole(sessionUser.role) : false;
-
+  const canUseGlobalPersonHistory = sessionUser?.role === "super_admin";
+  const activeHistoryScope: HistoryScope = canUseGlobalPersonHistory ? historyScope : "unit";
+  const canRequestDeletion = sessionUser ? isUnitScopedRole(sessionUser.role) && activeHistoryScope === "unit" : false;
+  const isPersonScope = canUseGlobalPersonHistory && activeHistoryScope === "person";
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
 
-  const buildFaltasCacheKey = useCallback((unidadId: string, q = "", estado = estadoFilter) => {
-    return `${unidadId}|${estado}|${q.trim().toLowerCase()}`;
+  const buildUnitCacheKey = useCallback((unidadId: string, q = "", estado: EstadoFilter = estadoFilter) => {
+    return `unit|${unidadId}|${estado}|${q.trim().toLowerCase()}`;
   }, [estadoFilter]);
 
-  const refreshFaltas = useCallback(async (
+  const buildPersonCacheKey = useCallback((personalId: string, q = "", estado: EstadoFilter = estadoFilter) => {
+    return `person|${personalId}|${estado}|${q.trim().toLowerCase()}`;
+  }, [estadoFilter]);
+
+  const refreshFaltasByUnit = useCallback(async (
     unidadId: string,
     q = "",
-    estado = estadoFilter,
+    estado: EstadoFilter = estadoFilter,
     options?: { force?: boolean },
   ) => {
     if (!unidadId) return;
-    const cacheKey = buildFaltasCacheKey(unidadId, q, estado);
+    const cacheKey = buildUnitCacheKey(unidadId, q, estado);
     const cached = faltasCacheRef.current.get(cacheKey);
 
     if (!options?.force && cached) {
@@ -110,10 +137,10 @@ export function HistorialPage() {
     setLoadError(null);
     const params = new URLSearchParams();
     params.set("unidadId", unidadId);
-    if (estado !== "todas") {
-      params.set("estado", estado);
-    }
+    params.set("scope", "unit");
+    if (estado !== "todas") params.set("estado", estado);
     if (q.trim()) params.set("q", q.trim());
+
     try {
       const payload = await get<{ data: Falta[] }>(`/api/faltas?${params}`);
       faltasCacheRef.current.set(cacheKey, payload.data);
@@ -121,9 +148,47 @@ export function HistorialPage() {
       setLastLoadedKey(cacheKey);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "No se pudo cargar el historial");
+    } finally {
+      setLoading(false);
     }
-    finally { setLoading(false); }
-  }, [buildFaltasCacheKey, get, estadoFilter]);
+  }, [buildUnitCacheKey, get, estadoFilter]);
+
+  const refreshFaltasByPersonal = useCallback(async (
+    personalId: string,
+    q = "",
+    estado: EstadoFilter = estadoFilter,
+    options?: { force?: boolean },
+  ) => {
+    if (!personalId) return;
+    const cacheKey = buildPersonCacheKey(personalId, q, estado);
+    const cached = faltasCacheRef.current.get(cacheKey);
+
+    if (!options?.force && cached) {
+      setFaltasRows(cached);
+      setLastLoadedKey(cacheKey);
+      setLoadError(null);
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
+    const params = new URLSearchParams();
+    params.set("scope", "global_person");
+    params.set("personalId", personalId);
+    if (estado !== "todas") params.set("estado", estado);
+    if (q.trim()) params.set("q", q.trim());
+
+    try {
+      const payload = await get<{ data: Falta[] }>(`/api/faltas?${params}`);
+      faltasCacheRef.current.set(cacheKey, payload.data);
+      setFaltasRows(payload.data);
+      setLastLoadedKey(cacheKey);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "No se pudo cargar el historial global");
+    } finally {
+      setLoading(false);
+    }
+  }, [buildPersonCacheKey, get, estadoFilter]);
 
   const refreshSolicitudes = useCallback(async (estado: "pendiente" | "aprobada") => {
     try {
@@ -141,9 +206,14 @@ export function HistorialPage() {
   }, [get]);
 
   useEffect(() => {
-    if (!effectiveUnitId) return;
-    void refreshFaltas(effectiveUnitId, "", estadoFilter);
-  }, [effectiveUnitId, refreshFaltas, estadoFilter]);
+    if (activeHistoryScope !== "unit" || !effectiveUnitId) return;
+    void refreshFaltasByUnit(effectiveUnitId, "", estadoFilter);
+  }, [effectiveUnitId, refreshFaltasByUnit, estadoFilter, activeHistoryScope]);
+
+  useEffect(() => {
+    if (!isPersonScope || !selectedPersonal) return;
+    void refreshFaltasByPersonal(selectedPersonal.id, "", estadoFilter);
+  }, [isPersonScope, selectedPersonal, refreshFaltasByPersonal, estadoFilter]);
 
   useEffect(() => {
     if (!sessionUser) return;
@@ -157,21 +227,79 @@ export function HistorialPage() {
     void refreshSolicitudes(solicitudesFilter);
   }, [sessionUser, solicitudesFilter, refreshSolicitudes]);
 
-  function handleSearch(e: FormEvent) {
+  function resetHistoryRows() {
+    setFaltasRows([]);
+    setLoadError(null);
+    setLastLoadedKey(null);
+  }
+
+  function handleScopeChange(scope: HistoryScope) {
+    setHistoryScope(scope);
+    setSearchText("");
+    resetHistoryRows();
+  }
+
+  async function handlePersonalSearch(e: FormEvent) {
     e.preventDefault();
-    if (effectiveUnitId) void refreshFaltas(effectiveUnitId, searchText, estadoFilter);
+    const q = personalSearchText.trim();
+
+    if (q.length < 2) {
+      toast.warning("Ingrese al menos 2 caracteres para buscar");
+      return;
+    }
+
+    setPersonalLoading(true);
+    setPersonalError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("q", q);
+      params.set("limit", "12");
+      const payload = await get<{ data: PersonalResumen[] }>(`/api/personal?${params}`);
+      setPersonalResults(payload.data);
+      if (payload.data.length === 0) {
+        setSelectedPersonal(null);
+        resetHistoryRows();
+      }
+    } catch (error) {
+      setPersonalError(error instanceof Error ? error.message : "No se pudo buscar el efectivo");
+    } finally {
+      setPersonalLoading(false);
+    }
+  }
+
+  function handleSelectPersonal(personal: PersonalResumen) {
+    setSelectedPersonal(personal);
+    setSearchText("");
+    resetHistoryRows();
+  }
+
+  function handleHistorySearch(e: FormEvent) {
+    e.preventDefault();
+    if (isPersonScope && selectedPersonal) {
+      void refreshFaltasByPersonal(selectedPersonal.id, searchText, estadoFilter);
+      return;
+    }
+
+    if (effectiveUnitId) {
+      void refreshFaltasByUnit(effectiveUnitId, searchText, estadoFilter);
+    }
   }
 
   function handleForceRefresh() {
-    if (effectiveUnitId) void refreshFaltas(effectiveUnitId, searchText, estadoFilter, { force: true });
+    if (isPersonScope && selectedPersonal) {
+      void refreshFaltasByPersonal(selectedPersonal.id, searchText, estadoFilter, { force: true });
+      return;
+    }
+
+    if (effectiveUnitId) {
+      void refreshFaltasByUnit(effectiveUnitId, searchText, estadoFilter, { force: true });
+    }
   }
 
   function handleSelectUnit(unitId: string) {
     setSelectedUnitId(unitId);
     setSearchText("");
-    setFaltasRows([]);
-    setLoadError(null);
-    setLastLoadedKey(null);
+    resetHistoryRows();
   }
 
   function getArticleBadge(articulo: string) {
@@ -200,12 +328,12 @@ export function HistorialPage() {
     const isRepresentacion = requestType === "representacion";
 
     if (isRepresentacion && requestMemo.trim().length < 3) {
-      toast.warning("Debe indicar el memorándum de representación");
+      toast.warning("Debe indicar el memorandum de representacion");
       return;
     }
 
     if (!isRepresentacion && requestReason.trim().length < 8) {
-      toast.warning("Debe indicar un motivo válido (mínimo 8 caracteres)");
+      toast.warning("Debe indicar un motivo valido (minimo 8 caracteres)");
       return;
     }
 
@@ -238,11 +366,43 @@ export function HistorialPage() {
   const requestFormValid = isRepresentacion
     ? requestMemo.trim().length >= 3 && (requestComment.trim().length === 0 || requestComment.trim().length >= 4)
     : requestReason.trim().length >= 8;
+  const canShowHistoryPanel = isPersonScope ? !!selectedPersonal : !!effectiveUnitId;
+  const showUnitColumn = isPersonScope;
+  const selectedContextLabel = isPersonScope
+    ? selectedPersonal?.nombreCompleto ?? "Efectivo no seleccionado"
+    : getUnitName(effectiveUnitId);
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {/* Unit selector */}
-      {canSelectUnit && (
+      {canUseGlobalPersonHistory && (
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-base font-bold text-[var(--navy-900)]">Alcance del historial</h3>
+              <p className="text-sm text-[var(--navy-500)]">
+                Consulte por unidad o revise el historial completo de un efectivo en todas las unidades.
+              </p>
+            </div>
+            <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl self-start">
+              {([
+                ["unit", "Por unidad"],
+                ["person", "Por efectivo"],
+              ] as const).map(([scope, label]) => (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => handleScopeChange(scope)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${activeHistoryScope === scope ? "bg-white shadow-sm text-[var(--navy-900)]" : "text-[var(--navy-500)]"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {canSelectUnit && activeHistoryScope === "unit" && (
         <Card className="p-5">
           <h3 className="text-base font-bold text-[var(--navy-900)] mb-3">Seleccionar Unidad Policial</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
@@ -278,19 +438,73 @@ export function HistorialPage() {
         </Card>
       )}
 
-      {/* Search & filters */}
-      {effectiveUnitId && (
+      {isPersonScope && (
+        <Card className="p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <form className="flex flex-1 gap-2" onSubmit={handlePersonalSearch}>
+              <Input
+                label="Buscar efectivo"
+                placeholder="CI, nombre o apellidos"
+                value={personalSearchText}
+                onChange={(e) => setPersonalSearchText(e.target.value)}
+                icon={Icons.search({ size: 16 })}
+                className="flex-1"
+              />
+              <Button type="submit" variant="secondary" icon={Icons.search({ size: 16 })} loading={personalLoading}>
+                Buscar
+              </Button>
+            </form>
+          </div>
+
+          {personalError && (
+            <div className="mt-3 rounded-xl border border-[var(--danger-100)] bg-[var(--danger-50)] p-3 text-sm text-[var(--danger-600)]">
+              {personalError}
+            </div>
+          )}
+
+          {personalResults.length > 0 && (
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {personalResults.map((personal) => (
+                <button
+                  key={personal.id}
+                  type="button"
+                  onClick={() => handleSelectPersonal(personal)}
+                  className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${selectedPersonal?.id === personal.id ? "border-[var(--gold-500)] bg-[var(--gold-50)]" : "border-[var(--border)] hover:border-[var(--navy-300)] hover:bg-[var(--navy-50)]"}`}
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--navy-100)] text-[var(--navy-500)]">
+                    {Icons.user({ size: 17 })}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[var(--navy-900)]">{personal.nombreCompleto}</p>
+                    <p className="text-xs text-[var(--navy-500)]">CI {personal.ci}</p>
+                    <p className="truncate text-xs text-[var(--navy-400)]">{personal.unidadNombre ?? "Sin unidad"}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {personalSearchText.trim().length >= 2 && !personalLoading && personalResults.length === 0 && !personalError && (
+            <div className="mt-4">
+              <EmptyState icon={Icons.user({ size: 40 })} title="Sin resultados" description="No se encontraron efectivos con ese criterio." />
+            </div>
+          )}
+        </Card>
+      )}
+
+      {canShowHistoryPanel && (
         <Card className="p-5">
           <div className="flex flex-col md:flex-row gap-3 mb-4">
-            <form className="flex gap-2 flex-1" onSubmit={handleSearch}>
-              <Input placeholder="Buscar por CI, nombre o memorándum" value={searchText} onChange={(e) => setSearchText(e.target.value)} icon={Icons.search({ size: 16 })} className="flex-1" />
+            <form className="flex gap-2 flex-1" onSubmit={handleHistorySearch}>
+              <Input
+                placeholder={isPersonScope ? "Filtrar por memorandum dentro del historial" : "Buscar por CI, nombre o memorandum"}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                icon={Icons.search({ size: 16 })}
+                className="flex-1"
+              />
               <Button type="submit" variant="secondary" icon={Icons.search({ size: 16 })}>Buscar</Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleForceRefresh}
-                disabled={loading}
-              >
+              <Button type="button" variant="outline" onClick={handleForceRefresh} disabled={loading}>
                 Actualizar
               </Button>
             </form>
@@ -310,10 +524,17 @@ export function HistorialPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center gap-2 text-sm text-[var(--navy-500)]">
-               Mostrando <strong className="text-[var(--navy-800)]">{faltasRows.length}</strong> registros de <strong className="text-[var(--navy-800)]">{getUnitName(effectiveUnitId)}</strong>
-            </div>
+          <div className="mb-3 text-sm text-[var(--navy-500)]">
+            {isPersonScope ? (
+              <>
+                Historial completo de <strong className="text-[var(--navy-800)]">{selectedContextLabel}</strong>.
+                Mostrando <strong className="text-[var(--navy-800)]">{faltasRows.length}</strong> registros en todas las unidades.
+              </>
+            ) : (
+              <>
+                Mostrando <strong className="text-[var(--navy-800)]">{faltasRows.length}</strong> registros de <strong className="text-[var(--navy-800)]">{selectedContextLabel}</strong>
+              </>
+            )}
           </div>
 
           {loading ? (
@@ -329,7 +550,6 @@ export function HistorialPage() {
           ) : faltasRows.length === 0 ? (
             <EmptyState icon={Icons.historial({ size: 40 })} title="Sin sanciones" description="No existen sanciones con el filtro aplicado." />
           ) : viewMode === "table" ? (
-            /* TABLE VIEW */
             <div className="overflow-auto rounded-xl border border-[var(--border)]">
               <table className="min-w-full text-sm">
                 <thead className="bg-[var(--navy-50)]">
@@ -337,12 +557,13 @@ export function HistorialPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Fecha</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Efectivo</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">CI</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Artículo</th>
-                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Memorándum</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Estado</th>
-                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Acciones</th>
-                   </tr>
-                 </thead>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Articulo</th>
+                    {showUnitColumn && <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Unidad sancionadora</th>}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Memorandum</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Estado</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase tracking-wider">Acciones</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {faltasRows.map((row) => (
                     <tr
@@ -354,6 +575,7 @@ export function HistorialPage() {
                       <td className="px-4 py-3 font-medium text-[var(--navy-900)]">{row.nombreCompleto}</td>
                       <td className="px-4 py-3 text-[var(--navy-600)]">{row.ci}</td>
                       <td className="px-4 py-3">{getArticleBadge(row.articulo)}</td>
+                      {showUnitColumn && <td className="px-4 py-3 text-[var(--navy-600)]">{row.unidadSancionNombre ?? row.unidadNombre ?? "-"}</td>}
                       <td className="px-4 py-3 text-[var(--navy-600)]">{row.memorandum}</td>
                       <td className="px-4 py-3">
                         <Badge variant={row.estado === "anulada" ? "default" : "success"}>{row.estado ?? "registrada"}</Badge>
@@ -383,7 +605,6 @@ export function HistorialPage() {
               </table>
             </div>
           ) : (
-            /* CARD VIEW (mobile-friendly) */
             <div className="grid gap-3 md:grid-cols-2">
               {faltasRows.map((row) => (
                 <button
@@ -399,13 +620,14 @@ export function HistorialPage() {
                     </div>
                     {getArticleBadge(row.articulo)}
                   </div>
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <div><p className="text-[10px] text-[var(--navy-400)]">Fecha</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.fechaSancion}</p></div>
-                      <div><p className="text-[10px] text-[var(--navy-400)]">Memorándum</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.memorandum}</p></div>
-                      <div><p className="text-[10px] text-[var(--navy-400)]">Estado</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.estado ?? "registrada"}</p></div>
-                    </div>
-                  </button>
-                ))}
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <div><p className="text-[10px] text-[var(--navy-400)]">Fecha</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.fechaSancion}</p></div>
+                    <div><p className="text-[10px] text-[var(--navy-400)]">Memorandum</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.memorandum}</p></div>
+                    <div><p className="text-[10px] text-[var(--navy-400)]">Estado</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.estado ?? "registrada"}</p></div>
+                    {showUnitColumn && <div><p className="text-[10px] text-[var(--navy-400)]">Unidad</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.unidadSancionNombre ?? row.unidadNombre ?? "-"}</p></div>}
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </Card>
@@ -414,7 +636,7 @@ export function HistorialPage() {
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de Baja/Eliminación</h3>
+            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de Baja/Eliminacion</h3>
             <p className="text-sm text-[var(--navy-500)]">Seguimiento de solicitudes pendientes y aceptadas.</p>
           </div>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
@@ -441,7 +663,7 @@ export function HistorialPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Fecha</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Efectivo</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Memo representación</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Memo representacion</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Detalle</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Estado</th>
                 </tr>
@@ -454,7 +676,7 @@ export function HistorialPage() {
                       {row.faltaResumen?.nombreCompleto ?? "-"} ({row.faltaResumen?.ci ?? "-"})
                     </td>
                     <td className="px-4 py-3 text-[var(--navy-700)]">
-                      {row.tipoSolicitud === "representacion" ? "Representación de la sanción" : "Error de inserción"}
+                      {row.tipoSolicitud === "representacion" ? "Representacion de la sancion" : "Error de insercion"}
                     </td>
                     <td className="px-4 py-3 text-[var(--navy-700)]">{row.memorandumRepresentacion ?? "-"}</td>
                     <td className="px-4 py-3 text-[var(--navy-700)] max-w-[350px]">{row.tipoSolicitud === "representacion" ? row.comentario ?? "Sin comentario" : row.motivo}</td>
@@ -472,7 +694,7 @@ export function HistorialPage() {
       <Modal
         open={requestModalOpen}
         onClose={closeRequestModal}
-        title="Solicitar baja o eliminación de sanción"
+        title="Solicitar baja o eliminacion de sancion"
         size="md"
         footer={(
           <>
@@ -492,9 +714,9 @@ export function HistorialPage() {
       >
         <div className="space-y-4">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--navy-50)] p-3">
-            <p className="text-xs text-[var(--navy-500)]">Sanción seleccionada</p>
+            <p className="text-xs text-[var(--navy-500)]">Sancion seleccionada</p>
             <p className="text-sm font-semibold text-[var(--navy-900)]">{requestTarget?.nombreCompleto ?? "-"} ({requestTarget?.ci ?? "-"})</p>
-            <p className="text-xs text-[var(--navy-600)] mt-1">Memorándum: {requestTarget?.memorandum ?? "-"} | Fecha: {requestTarget?.fechaSancion ?? "-"}</p>
+            <p className="text-xs text-[var(--navy-600)] mt-1">Memorandum: {requestTarget?.memorandum ?? "-"} | Fecha: {requestTarget?.fechaSancion ?? "-"}</p>
           </div>
 
           <div>
@@ -505,16 +727,16 @@ export function HistorialPage() {
                 onClick={() => setRequestType("representacion")}
                 className={`rounded-xl border p-3 text-left transition-colors ${isRepresentacion ? "border-[var(--gold-500)] bg-[var(--gold-50)]" : "border-[var(--border)] hover:border-[var(--navy-300)]"}`}
               >
-                <p className="text-sm font-semibold text-[var(--navy-900)]">Representación de la sanción</p>
-                <p className="text-xs text-[var(--navy-600)] mt-1">Requiere número de memorándum que da curso a la representación.</p>
+                <p className="text-sm font-semibold text-[var(--navy-900)]">Representacion de la sancion</p>
+                <p className="text-xs text-[var(--navy-600)] mt-1">Requiere numero de memorandum que da curso a la representacion.</p>
               </button>
               <button
                 type="button"
                 onClick={() => setRequestType("error_insercion")}
                 className={`rounded-xl border p-3 text-left transition-colors ${!isRepresentacion ? "border-[var(--gold-500)] bg-[var(--gold-50)]" : "border-[var(--border)] hover:border-[var(--navy-300)]"}`}
               >
-                <p className="text-sm font-semibold text-[var(--navy-900)]">Error de inserción</p>
-                <p className="text-xs text-[var(--navy-600)] mt-1">Permite detallar un error en el registro de la sanción.</p>
+                <p className="text-sm font-semibold text-[var(--navy-900)]">Error de insercion</p>
+                <p className="text-xs text-[var(--navy-600)] mt-1">Permite detallar un error en el registro de la sancion.</p>
               </button>
             </div>
           </div>
@@ -522,15 +744,15 @@ export function HistorialPage() {
           {isRepresentacion ? (
             <div className="space-y-3">
               <Input
-                label="Nro. de memorándum de representación"
+                label="Nro. de memorandum de representacion"
                 placeholder="Ej.: 012/2026"
                 value={requestMemo}
                 onChange={(e) => setRequestMemo(e.target.value)}
-                error={requestMemo.trim().length > 0 && requestMemo.trim().length < 3 ? "Mínimo 3 caracteres" : undefined}
+                error={requestMemo.trim().length > 0 && requestMemo.trim().length < 3 ? "Minimo 3 caracteres" : undefined}
               />
               <Textarea
                 label="Comentario corto (opcional)"
-                placeholder="Detalle breve del contexto de la representación..."
+                placeholder="Detalle breve del contexto de la representacion..."
                 rows={3}
                 value={requestComment}
                 onChange={(e) => setRequestComment(e.target.value)}
@@ -539,18 +761,17 @@ export function HistorialPage() {
             </div>
           ) : (
             <Textarea
-              label="Motivo de solicitud por error de inserción"
-              placeholder="Describa el error de inserción que originó la solicitud..."
+              label="Motivo de solicitud por error de insercion"
+              placeholder="Describa el error de insercion que origino la solicitud..."
               rows={4}
               value={requestReason}
               onChange={(e) => setRequestReason(e.target.value)}
-              error={requestReason.trim().length > 0 && requestReason.trim().length < 8 ? "Mínimo 8 caracteres" : undefined}
+              error={requestReason.trim().length > 0 && requestReason.trim().length < 8 ? "Minimo 8 caracteres" : undefined}
             />
           )}
         </div>
       </Modal>
 
-      {/* Detail modal */}
       <EfectivoDetail falta={selectedFalta} open={!!selectedFalta} onClose={() => setSelectedFalta(null)} />
     </div>
   );

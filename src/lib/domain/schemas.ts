@@ -80,6 +80,7 @@ export const listFaltasSearchSchema = z.object({
   q: z.string().optional(),
   personalId: z.string().optional(),
   unidadId: z.string().optional(),
+  scope: z.enum(["unit", "global_person"]).optional(),
   articulo: z.string().optional(),
   inciso: z.string().optional(),
   reincidencia: z.enum(["true", "false"]).optional(),

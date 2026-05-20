@@ -417,6 +417,7 @@ export async function GET(request: NextRequest) {
       q,
       personalId,
       unidadId,
+      scope,
       articulo,
       inciso,
       fechaInicio,
@@ -430,7 +431,19 @@ export async function GET(request: NextRequest) {
     let query: Query<DocumentData> = adminDb.collection("faltas");
 
     const userIsUnitScoped = USER_ROLES_UNIT_SCOPE.has(actor.role);
-    const scopedUnidadId = userIsUnitScoped && !personalId ? actor.unidadId : unidadId;
+    const isGlobalPersonScope = scope === "global_person";
+
+    if (isGlobalPersonScope) {
+      if (actor.role !== "super_admin") {
+        return forbidden("Solo super admin puede consultar historial global por efectivo");
+      }
+
+      if (!personalId) {
+        return badRequest("personalId requerido para historial global");
+      }
+    }
+
+    const scopedUnidadId = isGlobalPersonScope ? "" : (userIsUnitScoped && !personalId ? actor.unidadId : unidadId);
 
     if (personalId) {
       query = query.where("personalId", "==", personalId);
