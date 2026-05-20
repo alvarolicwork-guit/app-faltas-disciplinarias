@@ -515,7 +515,24 @@ export async function GET(request: NextRequest) {
       });
 
     return NextResponse.json({ data }, { status: 200 });
-  } catch {
+  } catch (error) {
+    console.error("GET /api/faltas failed", {
+      error,
+      message: error instanceof Error ? error.message : "unknown_error",
+      code: (error as { code?: string })?.code ?? null,
+    });
+
+    const firestoreCode = (error as { code?: string })?.code;
+    if (firestoreCode === "failed-precondition") {
+      return NextResponse.json(
+        {
+          error: "Indice Firestore faltante para listar faltas",
+          details: error instanceof Error ? error.message : "unknown_error",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({ error: "No se pudo listar faltas" }, { status: 500 });
   }
 }

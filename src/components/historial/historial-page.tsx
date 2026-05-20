@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -63,6 +63,9 @@ export function HistorialPage() {
   const [faltasRows, setFaltasRows] = useState<Falta[]>([]);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastLoadedKey, setLastLoadedKey] = useState<string | null>(null);
+  const faltasCacheRef = useRef<Map<string, Falta[]>>(new Map());
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [selectedFalta, setSelectedFalta] = useState<Falta | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<"registrada" | "anulada" | "todas">("registrada");
@@ -82,9 +85,29 @@ export function HistorialPage() {
 
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
 
-  const refreshFaltas = useCallback(async (unidadId: string, q = "", estado = estadoFilter) => {
+  const buildFaltasCacheKey = useCallback((unidadId: string, q = "", estado = estadoFilter) => {
+    return `${unidadId}|${estado}|${q.trim().toLowerCase()}`;
+  }, [estadoFilter]);
+
+  const refreshFaltas = useCallback(async (
+    unidadId: string,
+    q = "",
+    estado = estadoFilter,
+    options?: { force?: boolean },
+  ) => {
     if (!unidadId) return;
+    const cacheKey = buildFaltasCacheKey(unidadId, q, estado);
+    const cached = faltasCacheRef.current.get(cacheKey);
+
+    if (!options?.force && cached) {
+      setFaltasRows(cached);
+      setLastLoadedKey(cacheKey);
+      setLoadError(null);
+      return;
+    }
+
     setLoading(true);
+    setLoadError(null);
     const params = new URLSearchParams();
     params.set("unidadId", unidadId);
     if (estado !== "todas") {
@@ -93,10 +116,14 @@ export function HistorialPage() {
     if (q.trim()) params.set("q", q.trim());
     try {
       const payload = await get<{ data: Falta[] }>(`/api/faltas?${params}`);
+      faltasCacheRef.current.set(cacheKey, payload.data);
       setFaltasRows(payload.data);
-    } catch { /* silent */ }
+      setLastLoadedKey(cacheKey);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "No se pudo cargar el historial");
+    }
     finally { setLoading(false); }
-  }, [get, estadoFilter]);
+  }, [buildFaltasCacheKey, get, estadoFilter]);
 
   const refreshSolicitudes = useCallback(async (estado: "pendiente" | "aprobada") => {
     try {
@@ -115,7 +142,6 @@ export function HistorialPage() {
 
   useEffect(() => {
     if (!effectiveUnitId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshFaltas(effectiveUnitId, "", estadoFilter);
   }, [effectiveUnitId, refreshFaltas, estadoFilter]);
 
@@ -136,10 +162,16 @@ export function HistorialPage() {
     if (effectiveUnitId) void refreshFaltas(effectiveUnitId, searchText, estadoFilter);
   }
 
+  function handleForceRefresh() {
+    if (effectiveUnitId) void refreshFaltas(effectiveUnitId, searchText, estadoFilter, { force: true });
+  }
+
   function handleSelectUnit(unitId: string) {
     setSelectedUnitId(unitId);
     setSearchText("");
     setFaltasRows([]);
+    setLoadError(null);
+    setLastLoadedKey(null);
   }
 
   function getArticleBadge(articulo: string) {
@@ -188,6 +220,9 @@ export function HistorialPage() {
       };
 
       await post("/api/faltas/solicitudes", payload);
+      if (lastLoadedKey) {
+        faltasCacheRef.current.delete(lastLoadedKey);
+      }
       setPendingRequestIds((prev) => new Set(prev).add(requestTarget.id));
       await refreshSolicitudes(solicitudesFilter);
       closeRequestModal();
@@ -250,6 +285,14 @@ export function HistorialPage() {
             <form className="flex gap-2 flex-1" onSubmit={handleSearch}>
               <Input placeholder="Buscar por CI, nombre o memorándum" value={searchText} onChange={(e) => setSearchText(e.target.value)} icon={Icons.search({ size: 16 })} className="flex-1" />
               <Button type="submit" variant="secondary" icon={Icons.search({ size: 16 })}>Buscar</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleForceRefresh}
+                disabled={loading}
+              >
+                Actualizar
+              </Button>
             </form>
             <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl self-start">
               {(["registrada", "anulada", "todas"] as const).map((estado) => (
@@ -275,6 +318,14 @@ export function HistorialPage() {
 
           {loading ? (
             <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+          ) : loadError ? (
+            <div className="rounded-xl border border-[var(--danger-100)] bg-[var(--danger-50)] p-4">
+              <p className="text-sm font-semibold text-[var(--danger-600)]">No se pudo cargar el historial.</p>
+              <p className="mt-1 text-xs text-[var(--danger-600)]">{loadError}</p>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={handleForceRefresh}>
+                Reintentar
+              </Button>
+            </div>
           ) : faltasRows.length === 0 ? (
             <EmptyState icon={Icons.historial({ size: 40 })} title="Sin sanciones" description="No existen sanciones con el filtro aplicado." />
           ) : viewMode === "table" ? (

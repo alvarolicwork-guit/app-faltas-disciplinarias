@@ -13,6 +13,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "unidadId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaSancion", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "faltas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadId", "order": "ASCENDING" },
         { "fieldPath": "articulo", "order": "ASCENDING" },
         { "fieldPath": "fechaSancion", "order": "DESCENDING" }
       ]
