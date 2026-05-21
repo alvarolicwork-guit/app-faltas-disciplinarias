@@ -17,6 +17,7 @@ import { UnidadesPage } from "@/components/unidades/unidades-page";
 import { TransferenciasPage } from "@/components/transferencias/transferencias-page";
 import { SolicitudesPage } from "@/components/solicitudes/solicitudes-page";
 import { UnidadesProvider } from "@/hooks/use-unidades";
+import { DataCacheProvider } from "@/hooks/use-data-cache";
 import { Spinner } from "@/components/ui/primitives";
 
 function AppRouter() {
@@ -66,9 +67,11 @@ export function DisciplinarioApp() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <UnidadesProvider>
-          <AppRouter />
-        </UnidadesProvider>
+        <DataCacheProvider>
+          <UnidadesProvider>
+            <AppRouter />
+          </UnidadesProvider>
+        </DataCacheProvider>
       </ToastProvider>
     </AuthProvider>
   );

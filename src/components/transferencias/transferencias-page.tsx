@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Card, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
+import { useDataCache } from "@/hooks/use-data-cache";
 
 type Transferencia = {
   id: string;
@@ -18,26 +20,37 @@ type Transferencia = {
 
 export function TransferenciasPage() {
   const { get } = useApi();
+  const { fetchWithCache } = useDataCache();
   const [rows, setRows] = useState<Transferencia[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const loadData = useCallback(async (options?: { force?: boolean }) => {
+    setLoading(true);
+    try {
+      const payload = await fetchWithCache(
+        "transferencias:limit:150",
+        () => get<{ data: Transferencia[] }>("/api/transferencias?limit=150"),
+        { ttlMs: 5 * 60 * 1000, force: options?.force },
+      );
+      setRows(payload.data.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchWithCache, get]);
+
   useEffect(() => {
-    void (async () => {
-      setLoading(true);
-      try {
-        const payload = await get<{ data: Transferencia[] }>("/api/transferencias?limit=150");
-        setRows(payload.data);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [get]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
+  }, [loadData]);
 
   return (
     <div className="space-y-4 animate-fade-in">
       <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-2">Auditoría de Traspasos</h3>
         <p className="text-sm text-[var(--navy-500)] mb-4">Registro de transferencias de personal entre unidades.</p>
+        <Button variant="outline" size="sm" onClick={() => { void loadData({ force: true }); }} loading={loading} className="mb-4">
+          Actualizar
+        </Button>
 
         {loading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>

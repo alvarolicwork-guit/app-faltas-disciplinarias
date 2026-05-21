@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
 import { Card, Skeleton, EmptyState, Badge } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
 import { useAuth, isGlobalRole } from "@/hooks/use-auth";
 import { useUnidades } from "@/hooks/use-unidades";
+import { useDataCache } from "@/hooks/use-data-cache";
 
 type DashboardStats = {
   totalFaltas: number;
@@ -20,25 +22,33 @@ type DashboardStats = {
 export function DashboardPage() {
   const { get } = useApi();
   const { sessionUser } = useAuth();
+  const { fetchWithCache } = useDataCache();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const { unidades } = useUnidades();
 
   const isGlobal = isGlobalRole(sessionUser?.role ?? "");
   const unitId = sessionUser?.unidadId ?? "";
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (options?: { force?: boolean }) => {
     setLoading(true);
     try {
       const params = unitId && !isGlobal ? `?unidadId=${unitId}` : "";
-      const data = await get<DashboardStats>(`/api/dashboard${params}`);
-      setStats(data);
+      const cacheKey = `dashboard:${isGlobal ? "global" : unitId || "sin-unidad"}`;
+      const result = await fetchWithCache(
+        cacheKey,
+        () => get<DashboardStats>(`/api/dashboard${params}`),
+        { ttlMs: 2 * 60 * 1000, force: options?.force },
+      );
+      setStats(result.data);
+      setLastUpdatedAt(result.storedAt);
     } catch {
       /* silent */
     } finally {
       setLoading(false);
     }
-  }, [get, unitId, isGlobal]);
+  }, [fetchWithCache, get, unitId, isGlobal]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -56,6 +66,18 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { void fetchStats({ force: true }); }}
+          loading={loading}
+          icon={Icons.reportes({ size: 14 })}
+        >
+          {lastUpdatedAt ? "Actualizar datos" : "Actualizar"}
+        </Button>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
         {kpis.map((kpi) => (

@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useApi } from "@/hooks/use-api";
 import { useAuth, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
+import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
 import { useUnidades } from "@/hooks/use-unidades";
 import { getRangoOrder } from "@/lib/domain/rangos-policiales";
@@ -56,6 +57,7 @@ function statusVariant(estado: TransferRequest["estado"]): "warning" | "success"
 export function PersonalPage() {
   const { get, post, patch } = useApi();
   const { sessionUser } = useAuth();
+  const { fetchWithCache, invalidate } = useDataCache();
   const { unitOptions } = useUnidades();
   const toast = useToast();
   const { error: toastError, success: toastSuccess, warning: toastWarning } = toast;
@@ -73,12 +75,15 @@ export function PersonalPage() {
   const [requestScope, setRequestScope] = useState<"entrantes" | "salientes">("entrantes");
   const [requests, setRequests] = useState<TransferRequest[]>([]);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+  const [personalUpdatedAt, setPersonalUpdatedAt] = useState<number | null>(null);
+  const [requestsUpdatedAt, setRequestsUpdatedAt] = useState<number | null>(null);
 
   const isUnitScoped = sessionUser ? isUnitScopedRole(sessionUser.role) : false;
   const canTransfer = sessionUser ? sessionUser.role === "admin_unidad" || isGlobalRole(sessionUser.role) : false;
+  const sessionUnitId = sessionUser?.unidadId ?? "";
   const effectiveUnitId = isUnitScoped ? (sessionUser?.unidadId ?? "") : selectedUnitId;
 
-  const fetchPersonal = useCallback(async () => {
+  const fetchPersonal = useCallback(async (options?: { force?: boolean }) => {
     if (!effectiveUnitId) {
       setRows([]);
       return;
@@ -89,17 +94,22 @@ export function PersonalPage() {
       const params = new URLSearchParams();
       params.set("unidadId", effectiveUnitId);
       params.set("limit", "300");
-      const payload = await get<{ data: PersonalRow[] }>(`/api/personal?${params.toString()}`);
-      setRows(payload.data);
+      const payload = await fetchWithCache(
+        `personal:unidad:${effectiveUnitId}`,
+        () => get<{ data: PersonalRow[] }>(`/api/personal?${params.toString()}`),
+        { ttlMs: 5 * 60 * 1000, force: options?.force },
+      );
+      setRows(payload.data.data);
+      setPersonalUpdatedAt(payload.storedAt);
     } catch (error) {
       setRows([]);
       toastError("Error al cargar personal", error instanceof Error ? error.message : "No se pudo cargar personal");
     } finally {
       setLoading(false);
     }
-  }, [effectiveUnitId, get, toastError]);
+  }, [effectiveUnitId, fetchWithCache, get, toastError]);
 
-  const fetchRequests = useCallback(async () => {
+  const fetchRequests = useCallback(async (options?: { force?: boolean }) => {
     if (!canTransfer) {
       setRequests([]);
       return;
@@ -115,15 +125,21 @@ export function PersonalPage() {
         if (requestScope === "entrantes") params.set("toUnidadId", effectiveUnitId);
         if (requestScope === "salientes") params.set("fromUnidadId", effectiveUnitId);
       }
-      const payload = await get<{ data: TransferRequest[] }>(`/api/transferencias/solicitudes?${params}`);
-      setRequests(payload.data);
+      const unitPart = isUnitScoped ? sessionUnitId || "sin-unidad" : effectiveUnitId || "global";
+      const payload = await fetchWithCache(
+        `transfer-requests:${requestScope}:${unitPart}`,
+        () => get<{ data: TransferRequest[] }>(`/api/transferencias/solicitudes?${params}`),
+        { ttlMs: requestScope === "entrantes" ? 60 * 1000 : 2 * 60 * 1000, force: options?.force },
+      );
+      setRequests(payload.data.data);
+      setRequestsUpdatedAt(payload.storedAt);
     } catch (error) {
       setRequests([]);
       toastError("Error al cargar solicitudes", error instanceof Error ? error.message : "No se pudieron cargar solicitudes");
     } finally {
       setRequestsLoading(false);
     }
-  }, [canTransfer, effectiveUnitId, get, isUnitScoped, requestScope, toastError]);
+  }, [canTransfer, effectiveUnitId, fetchWithCache, get, isUnitScoped, requestScope, sessionUnitId, toastError]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -195,11 +211,12 @@ export function PersonalPage() {
         toUnidadId: targetUnitId,
         motivoSolicitud: transferReason.trim(),
       });
+      invalidate("transfer-requests:");
       toastSuccess("Solicitud enviada", "La unidad destino tiene 24 horas para aceptar o rechazar.");
       setSendModalOpen(false);
       setSelectedPersonal(null);
       setRequestScope("salientes");
-      await fetchRequests();
+      await fetchRequests({ force: true });
     } catch (error) {
       toastError("Error", error instanceof Error ? error.message : "No se pudo enviar la solicitud");
     } finally {
@@ -218,9 +235,16 @@ export function PersonalPage() {
         decision,
         observacionRespuesta,
       });
+      invalidate("transfer-requests:");
+      invalidate("transferencias:");
+      if (decision === "aceptada") {
+        invalidate(`personal:unidad:${row.fromUnidadId}`);
+        invalidate(`personal:unidad:${row.toUnidadId}`);
+        invalidate("dashboard:");
+      }
       toastSuccess(decision === "aceptada" ? "Traspaso aceptado" : "Traspaso rechazado");
-      await fetchRequests();
-      await fetchPersonal();
+      await fetchRequests({ force: true });
+      await fetchPersonal({ force: true });
     } catch (error) {
       toastError("Error", error instanceof Error ? error.message : "No se pudo resolver la solicitud");
     } finally {
@@ -248,10 +272,20 @@ export function PersonalPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h3 className="text-base font-bold text-[var(--navy-900)]">Personal</h3>
+            {personalUpdatedAt && (
+              <p className="text-xs text-[var(--navy-400)]">
+                Datos conservados en esta sesion.
+              </p>
+            )}
             <p className="text-sm text-[var(--navy-500)]">
               Listado de personal por unidad. Ordenado por jerarquía de grado.
             </p>
           </div>
+          {effectiveUnitId && (
+            <Button variant="outline" size="sm" onClick={() => { void fetchPersonal({ force: true }); }} loading={loading}>
+              Actualizar
+            </Button>
+          )}
           {!isUnitScoped && (
             <div className="w-full md:w-[360px]">
               <Select
@@ -323,6 +357,14 @@ export function PersonalPage() {
               <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de envío</h3>
               <p className="text-sm text-[var(--navy-500)]">Control de traspasos pendientes, aceptados y rechazados.</p>
             </div>
+            {requestsUpdatedAt && (
+              <p className="text-xs text-[var(--navy-400)]">
+                Datos conservados en esta sesion.
+              </p>
+            )}
+            <Button variant="outline" size="sm" onClick={() => { void fetchRequests({ force: true }); }} loading={requestsLoading}>
+              Actualizar
+            </Button>
             <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
               {(["entrantes", "salientes"] as const).map((scope) => (
                 <button

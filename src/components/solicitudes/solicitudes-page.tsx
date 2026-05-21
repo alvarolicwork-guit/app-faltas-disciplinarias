@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Card, EmptyState, Skeleton, Badge } from "@/components/ui/primitives";
 import { ApiError, useApi } from "@/hooks/use-api";
+import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
 
 type Solicitud = {
@@ -27,6 +28,7 @@ type Solicitud = {
 
 export function SolicitudesPage() {
   const { get, patch } = useApi();
+  const { fetchWithCache, invalidate } = useDataCache();
   const toast = useToast();
   const [rows, setRows] = useState<Solicitud[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,20 +39,32 @@ export function SolicitudesPage() {
   const [resolveDecision, setResolveDecision] = useState<"aprobada" | "rechazada">("aprobada");
   const [resolveReason, setResolveReason] = useState("");
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
-      const payload = await get<{ data: Solicitud[] }>(`/api/faltas/solicitudes?estado=${filter}`);
-      setRows(payload.data);
+      const payload = await fetchWithCache(
+        `solicitudes-baja:${filter}`,
+        () => get<{ data: Solicitud[] }>(`/api/faltas/solicitudes?estado=${filter}`),
+        { ttlMs: filter === "pendiente" ? 60 * 1000 : 5 * 60 * 1000, force: options?.force },
+      );
+      setRows(payload.data.data);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
-  }, [get, filter]);
+  }, [fetchWithCache, get, filter]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (filter !== "pendiente") return;
+    const timer = window.setInterval(() => {
+      void loadData({ force: true, silent: true });
+    }, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [filter, loadData]);
 
   function openResolveModal(row: Solicitud, decision: "aprobada" | "rechazada") {
     setResolveTarget(row);
@@ -101,11 +115,15 @@ export function SolicitudesPage() {
         decision: resolveDecision,
         motivoResolucion,
       });
+      invalidate("solicitudes-baja:");
+      invalidate("historial:");
+      invalidate("dashboard:");
+      invalidate("reportes:");
       toast.success(
         resolveDecision === "aprobada" ? "Solicitud aprobada" : "Solicitud rechazada",
       );
       closeResolveModal();
-      await loadData();
+      await loadData({ force: true });
     } catch (error) {
       toast.error("Error", getApiErrorMessage(error));
     } finally {
@@ -121,6 +139,9 @@ export function SolicitudesPage() {
             <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes para Dejar sin Efecto</h3>
             <p className="text-sm text-[var(--navy-500)]">Bandeja departamental para resolver solicitudes sobre sanciones disciplinarias.</p>
           </div>
+          <Button variant="outline" size="sm" onClick={() => { void loadData({ force: true }); }} loading={loading}>
+            Actualizar
+          </Button>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
             {(["pendiente", "aprobada", "rechazada"] as const).map((status) => (
               <button

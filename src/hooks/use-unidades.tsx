@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { useApi } from "./use-api";
 import { useToast } from "./use-toast";
 import { useAuth } from "./use-auth";
+import { useDataCache } from "./use-data-cache";
 
 export type Unidad = {
   id: string;
@@ -25,6 +26,7 @@ export function UnidadesProvider({ children }: { children: ReactNode }) {
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [loading, setLoading] = useState(true);
   const { get } = useApi();
+  const { fetchWithCache, invalidate } = useDataCache();
   const { firebaseUser } = useAuth();
   const { error: showError } = useToast();
 
@@ -36,15 +38,19 @@ export function UnidadesProvider({ children }: { children: ReactNode }) {
     }
     try {
       setLoading(true);
-      const res = await get<{ data: Unidad[] }>("/api/unidades");
-      setUnidades(res.data);
+      const res = await fetchWithCache(
+        "unidades:all",
+        () => get<{ data: Unidad[] }>("/api/unidades"),
+        { ttlMs: 10 * 60 * 1000 },
+      );
+      setUnidades(res.data.data);
     } catch (error) {
       console.error("Error fetching units:", error);
       showError("Error de conexión", "No se pudieron cargar las unidades policiales");
     } finally {
       setLoading(false);
     }
-  }, [get, showError, firebaseUser]);
+  }, [fetchWithCache, get, showError, firebaseUser]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -58,7 +64,16 @@ export function UnidadesProvider({ children }: { children: ReactNode }) {
   }, [unidades]);
 
   return (
-    <UnidadesContext.Provider value={{ unidades, unitOptions, loading, refresh: fetchUnidades, getUnitName }}>
+    <UnidadesContext.Provider value={{
+      unidades,
+      unitOptions,
+      loading,
+      refresh: async () => {
+        invalidate("unidades:");
+        await fetchUnidades();
+      },
+      getUnitName,
+    }}>
       {children}
     </UnidadesContext.Provider>
   );

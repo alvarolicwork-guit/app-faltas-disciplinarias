@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { Card, Badge, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
 import { useAuth, isUnitScopedRole } from "@/hooks/use-auth";
+import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 import { useToast } from "@/hooks/use-toast";
 import { EfectivoDetail } from "./efectivo-detail";
@@ -70,6 +71,7 @@ type EstadoFilter = "registrada" | "anulada" | "todas";
 export function HistorialPage() {
   const { get, post } = useApi();
   const { sessionUser } = useAuth();
+  const { fetchWithCache, invalidate } = useDataCache();
   const { unidades, getUnitName } = useUnidades();
   const toast = useToast();
 
@@ -86,7 +88,6 @@ export function HistorialPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastLoadedKey, setLastLoadedKey] = useState<string | null>(null);
-  const faltasCacheRef = useRef<Map<string, Falta[]>>(new Map());
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [selectedFalta, setSelectedFalta] = useState<Falta | null>(null);
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("registrada");
@@ -109,11 +110,11 @@ export function HistorialPage() {
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
 
   const buildUnitCacheKey = useCallback((unidadId: string, q = "", estado: EstadoFilter = estadoFilter) => {
-    return `unit|${unidadId}|${estado}|${q.trim().toLowerCase()}`;
+    return `historial:unit:${unidadId}:${estado}:${q.trim().toLowerCase()}`;
   }, [estadoFilter]);
 
   const buildPersonCacheKey = useCallback((personalId: string, q = "", estado: EstadoFilter = estadoFilter) => {
-    return `person|${personalId}|${estado}|${q.trim().toLowerCase()}`;
+    return `historial:person:${personalId}:${estado}:${q.trim().toLowerCase()}`;
   }, [estadoFilter]);
 
   const refreshFaltasByUnit = useCallback(async (
@@ -124,15 +125,6 @@ export function HistorialPage() {
   ) => {
     if (!unidadId) return;
     const cacheKey = buildUnitCacheKey(unidadId, q, estado);
-    const cached = faltasCacheRef.current.get(cacheKey);
-
-    if (!options?.force && cached) {
-      setFaltasRows(cached);
-      setLastLoadedKey(cacheKey);
-      setLoadError(null);
-      return;
-    }
-
     setLoading(true);
     setLoadError(null);
     const params = new URLSearchParams();
@@ -142,16 +134,19 @@ export function HistorialPage() {
     if (q.trim()) params.set("q", q.trim());
 
     try {
-      const payload = await get<{ data: Falta[] }>(`/api/faltas?${params}`);
-      faltasCacheRef.current.set(cacheKey, payload.data);
-      setFaltasRows(payload.data);
+      const payload = await fetchWithCache(
+        cacheKey,
+        () => get<{ data: Falta[] }>(`/api/faltas?${params}`),
+        { ttlMs: 5 * 60 * 1000, force: options?.force },
+      );
+      setFaltasRows(payload.data.data);
       setLastLoadedKey(cacheKey);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "No se pudo cargar el historial");
     } finally {
       setLoading(false);
     }
-  }, [buildUnitCacheKey, get, estadoFilter]);
+  }, [buildUnitCacheKey, fetchWithCache, get, estadoFilter]);
 
   const refreshFaltasByPersonal = useCallback(async (
     personalId: string,
@@ -161,15 +156,6 @@ export function HistorialPage() {
   ) => {
     if (!personalId) return;
     const cacheKey = buildPersonCacheKey(personalId, q, estado);
-    const cached = faltasCacheRef.current.get(cacheKey);
-
-    if (!options?.force && cached) {
-      setFaltasRows(cached);
-      setLastLoadedKey(cacheKey);
-      setLoadError(null);
-      return;
-    }
-
     setLoading(true);
     setLoadError(null);
     const params = new URLSearchParams();
@@ -179,23 +165,30 @@ export function HistorialPage() {
     if (q.trim()) params.set("q", q.trim());
 
     try {
-      const payload = await get<{ data: Falta[] }>(`/api/faltas?${params}`);
-      faltasCacheRef.current.set(cacheKey, payload.data);
-      setFaltasRows(payload.data);
+      const payload = await fetchWithCache(
+        cacheKey,
+        () => get<{ data: Falta[] }>(`/api/faltas?${params}`),
+        { ttlMs: 5 * 60 * 1000, force: options?.force },
+      );
+      setFaltasRows(payload.data.data);
       setLastLoadedKey(cacheKey);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "No se pudo cargar el historial global");
     } finally {
       setLoading(false);
     }
-  }, [buildPersonCacheKey, get, estadoFilter]);
+  }, [buildPersonCacheKey, fetchWithCache, get, estadoFilter]);
 
   const refreshSolicitudes = useCallback(async (estado: "pendiente" | "aprobada") => {
     try {
-      const payload = await get<{ data: SolicitudResumen[] }>(`/api/faltas/solicitudes?estado=${estado}`);
-      setSolicitudesRows(payload.data);
+      const payload = await fetchWithCache(
+        `solicitudes-baja:${estado}`,
+        () => get<{ data: SolicitudResumen[] }>(`/api/faltas/solicitudes?estado=${estado}`),
+        { ttlMs: estado === "pendiente" ? 60 * 1000 : 5 * 60 * 1000 },
+      );
+      setSolicitudesRows(payload.data.data);
       if (estado === "pendiente") {
-        setPendingRequestIds(new Set(payload.data.map((row) => row.faltaId)));
+        setPendingRequestIds(new Set(payload.data.data.map((row) => row.faltaId)));
       }
     } catch {
       if (estado === "pendiente") {
@@ -203,15 +196,17 @@ export function HistorialPage() {
       }
       setSolicitudesRows([]);
     }
-  }, [get]);
+  }, [fetchWithCache, get]);
 
   useEffect(() => {
     if (activeHistoryScope !== "unit" || !effectiveUnitId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshFaltasByUnit(effectiveUnitId, "", estadoFilter);
   }, [effectiveUnitId, refreshFaltasByUnit, estadoFilter, activeHistoryScope]);
 
   useEffect(() => {
     if (!isPersonScope || !selectedPersonal) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshFaltasByPersonal(selectedPersonal.id, "", estadoFilter);
   }, [isPersonScope, selectedPersonal, refreshFaltasByPersonal, estadoFilter]);
 
@@ -353,8 +348,9 @@ export function HistorialPage() {
 
       await post("/api/faltas/solicitudes", payload);
       if (lastLoadedKey) {
-        faltasCacheRef.current.delete(lastLoadedKey);
+        invalidate(lastLoadedKey);
       }
+      invalidate("solicitudes-baja:");
       setPendingRequestIds((prev) => new Set(prev).add(requestTarget.id));
       await refreshSolicitudes(solicitudesFilter);
       closeRequestModal();

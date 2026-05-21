@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/select";
 import { Card, Badge, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
 import { useAuth, isGlobalRole } from "@/hooks/use-auth";
+import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 
 type ReporteData = {
@@ -22,6 +23,7 @@ type ReporteData = {
 export function ReportesPage() {
   const { get } = useApi();
   const { sessionUser } = useAuth();
+  const { fetchWithCache } = useDataCache();
   const { unitOptions: rawUnitOptions } = useUnidades();
   const isGlobal = isGlobalRole(sessionUser?.role ?? "");
 
@@ -38,7 +40,7 @@ export function ReportesPage() {
 
   const unitOptions = [{ value: "", label: "Todas las unidades" }, ...rawUnitOptions];
 
-  const fetchReport = useCallback(async () => {
+  const fetchReport = useCallback(async (options?: { force?: boolean }) => {
     setLoading(true);
     setError(null);
     try {
@@ -46,15 +48,20 @@ export function ReportesPage() {
       if (unidadId) params.set("unidadId", unidadId);
       params.set("fechaInicio", fechaInicio);
       params.set("fechaFin", fechaFin);
-      const res = await get<ReporteData>(`/api/reportes?${params}`);
-      setData(res);
+      const cacheKey = `reportes:unidad:${unidadId || "todas"}:desde:${fechaInicio}:hasta:${fechaFin}`;
+      const res = await fetchWithCache(
+        cacheKey,
+        () => get<ReporteData>(`/api/reportes?${params}`),
+        { ttlMs: 10 * 60 * 1000, force: options?.force },
+      );
+      setData(res.data);
     } catch (err) {
       setData(null);
       setError(err instanceof Error ? err.message : "No se pudo generar el reporte");
     } finally {
       setLoading(false);
     }
-  }, [get, unidadId, fechaInicio, fechaFin]);
+  }, [fetchWithCache, get, unidadId, fechaInicio, fechaFin]);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -68,9 +75,16 @@ export function ReportesPage() {
           <Input label="Desde" type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
           <Input label="Hasta" type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
           <div className="flex items-end">
-            <Button variant="primary" onClick={fetchReport} loading={loading} icon={Icons.reportes({ size: 16 })} className="w-full">Generar</Button>
+            <Button variant="primary" onClick={() => { void fetchReport(); }} loading={loading} icon={Icons.reportes({ size: 16 })} className="w-full">Generar</Button>
           </div>
         </div>
+        {data && (
+          <div className="mt-3">
+            <Button variant="outline" size="sm" onClick={() => { void fetchReport({ force: true }); }} loading={loading}>
+              Actualizar reporte
+            </Button>
+          </div>
+        )}
       </Card>
 
       {loading && <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}</div>}

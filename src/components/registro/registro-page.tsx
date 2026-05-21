@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import { useApi, ApiError } from "@/hooks/use-api";
 import { useAuth, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
+import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 import { useToast } from "@/hooks/use-toast";
 import { DISCIPLINARY_CATALOG, type DisciplinaryArticle } from "@/lib/domain/disciplinary-catalog";
@@ -48,6 +49,7 @@ type ReincidenciaOrigenState = {
 export function RegistroPage() {
   const { get, post } = useApi();
   const { sessionUser } = useAuth();
+  const { invalidate } = useDataCache();
   const { unitOptions, getUnitName } = useUnidades();
   const toast = useToast();
 
@@ -239,6 +241,9 @@ export function RegistroPage() {
         reincidenciaOrigen,
       });
       toast.success("Sanción registrada", "El registro se guardó correctamente.");
+      invalidate("dashboard:");
+      invalidate("historial:");
+      invalidate("reportes:");
       setForm((prev) => ({ ...prev, inciso: "", memorandum: "", motivo: "" }));
       setSelectedPersonalId("");
       setOrigenRows([]);
@@ -303,6 +308,10 @@ export function RegistroPage() {
         fromUnidadId: selectedPersonal.unidadId,
       });
       toast.success("Transferencia completada", "El funcionario ahora pertenece a su unidad.");
+      invalidate(`personal:unidad:${selectedPersonal.unidadId}`);
+      invalidate(`personal:unidad:${effectiveUnitId}`);
+      invalidate("transferencias:");
+      invalidate("dashboard:");
       await refreshPersonal(searchText, effectiveUnitId);
     } catch (err) {
       toast.error("Error de transferencia", err instanceof Error ? err.message : "No se pudo transferir");
@@ -332,6 +341,10 @@ export function RegistroPage() {
         toUnidadId: transferTargetUnitId,
       });
       toast.success("Reasignación completada", "El funcionario fue reasignado a la unidad destino.");
+      invalidate(`personal:unidad:${selectedPersonal.unidadId}`);
+      invalidate(`personal:unidad:${transferTargetUnitId}`);
+      invalidate("transferencias:");
+      invalidate("dashboard:");
       await refreshPersonal(searchText, effectiveUnitId);
     } catch (err) {
       toast.error("Error de reasignación", err instanceof Error ? err.message : "No se pudo reasignar");

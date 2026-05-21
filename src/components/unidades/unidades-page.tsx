@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icons } from "@/components/ui/icons";
 import { Button, Input, Modal, Badge, Card, EmptyState, Skeleton, ConfirmDialog } from "@/components/ui";
 import { useApi, ApiError } from "@/hooks/use-api";
+import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
 import { useUnidades, Unidad } from "@/hooks/use-unidades";
 
@@ -11,6 +12,7 @@ export function UnidadesPage() {
   const { unidades, loading, refresh } = useUnidades();
   const [searchTerm, setSearchTerm] = useState("");
   const { post, patch, del } = useApi();
+  const { invalidate } = useDataCache();
   const toast = useToast();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -58,6 +60,9 @@ export function UnidadesPage() {
         toast.success("Unidad creada");
       }
       setModalOpen(false);
+      invalidate("dashboard:");
+      invalidate("historial:");
+      invalidate("personal:");
       await refresh();
     } catch (error) {
       const msg = error instanceof ApiError ? error.message : "Error al guardar";
@@ -75,6 +80,9 @@ export function UnidadesPage() {
       await del(`/api/unidades?id=${deletingUnidad.id}`);
       toast.success("Unidad eliminada");
       setConfirmOpen(false);
+      invalidate("dashboard:");
+      invalidate("historial:");
+      invalidate("personal:");
       await refresh();
     } catch (error) {
       const msg = error instanceof ApiError ? error.message : "Error al eliminar";
