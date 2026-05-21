@@ -115,6 +115,73 @@
       ]
     },
     {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUnidadId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "personalId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transferencias_solicitudes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "solicitudes_eliminacion_falta",
       "queryScope": "COLLECTION",
       "fields": [
