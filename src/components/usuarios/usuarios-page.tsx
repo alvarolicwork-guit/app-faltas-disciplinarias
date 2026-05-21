@@ -144,8 +144,24 @@ export function UsuariosPage() {
     setDeactivateReason("");
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function validateUserForm(): string | null {
+    if (!editUser && !form.email.trim()) return "Ingrese el correo electronico";
+    if (!editUser && form.password.length < 8) return "Ingrese una contrasena de al menos 8 caracteres";
+    if (!form.grado) return "Seleccione el grado";
+    if (!form.nombres.trim()) return "Ingrese nombres";
+    if (!form.apellidos.trim()) return "Ingrese apellidos";
+    if (!form.role) return "Seleccione el rol";
+    if (needsUnit && !form.unidadId) return "Seleccione la unidad";
+    return null;
+  }
+
+  async function saveUser() {
+    const validationError = validateUserForm();
+    if (validationError) {
+      toast.warning(validationError);
+      return;
+    }
+
     setBusy(true);
     try {
       const unitName = getUnitName(form.unidadId);
@@ -181,6 +197,11 @@ export function UsuariosPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    await saveUser();
   }
 
   async function handleHandover() {
@@ -468,7 +489,7 @@ export function UsuariosPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSubmit} loading={busy}>{editUser ? "Guardar" : "Crear"}</Button>
+            <Button variant="primary" onClick={() => { void saveUser(); }} loading={busy}>{editUser ? "Guardar" : "Crear"}</Button>
           </>
         }
       >
