@@ -26,6 +26,12 @@ function toIso(value: unknown): string | null {
     : null;
 }
 
+function toMillis(value: unknown): number {
+  return value && typeof value === "object" && "toMillis" in value
+    ? (value as { toMillis?: () => number }).toMillis?.() ?? 0
+    : 0;
+}
+
 async function expirePendingRequests(db: FirebaseFirestore.Firestore, unidadId?: string) {
   const now = Timestamp.now();
   let query: FirebaseFirestore.Query = db
@@ -76,7 +82,14 @@ export async function GET(request: NextRequest) {
     const limitParam = Number(request.nextUrl.searchParams.get("limit") ?? "80");
     const limit = Number.isNaN(limitParam) ? 80 : Math.min(Math.max(limitParam, 1), 150);
 
-    await expirePendingRequests(db, isUnitScopedRole(actor.role) ? actor.unidadId : undefined);
+    try {
+      await expirePendingRequests(db, isUnitScopedRole(actor.role) ? actor.unidadId : undefined);
+    } catch (error) {
+      console.warn("No se pudieron vencer solicitudes pendientes antes del listado", {
+        message: error instanceof Error ? error.message : "unknown_error",
+        code: (error as { code?: string })?.code ?? null,
+      });
+    }
 
     let query: FirebaseFirestore.Query = db.collection("transferencias_solicitudes");
 
@@ -99,19 +112,26 @@ export async function GET(request: NextRequest) {
       query = query.where("estado", "==", estado);
     }
 
-    query = query.orderBy("createdAt", "desc").limit(limit);
+    query = query.limit(limit);
 
     const snap = await query.get();
-    const data = snap.docs.map((doc) => {
-      const item = doc.data();
-      return {
-        id: doc.id,
-        ...item,
-        createdAt: toIso(item.createdAt),
-        expiresAt: toIso(item.expiresAt),
-        respondedAt: toIso(item.respondedAt),
-        updatedAt: toIso(item.updatedAt),
-      };
+    const dataWithSort = snap.docs
+      .map((doc) => {
+        const item = doc.data();
+        return {
+          id: doc.id,
+          ...item,
+          createdAt: toIso(item.createdAt),
+          expiresAt: toIso(item.expiresAt),
+          respondedAt: toIso(item.respondedAt),
+          updatedAt: toIso(item.updatedAt),
+          createdAtMillis: toMillis(item.createdAt),
+        };
+      })
+      .sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+    const data = dataWithSort.map(({ createdAtMillis, ...output }) => {
+      void createdAtMillis;
+      return output;
     });
 
     return NextResponse.json({ data }, { status: 200 });

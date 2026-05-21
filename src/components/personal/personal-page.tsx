@@ -58,6 +58,7 @@ export function PersonalPage() {
   const { sessionUser } = useAuth();
   const { unitOptions } = useUnidades();
   const toast = useToast();
+  const { error: toastError, success: toastSuccess, warning: toastWarning } = toast;
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<PersonalRow[]>([]);
@@ -92,11 +93,11 @@ export function PersonalPage() {
       setRows(payload.data);
     } catch (error) {
       setRows([]);
-      toast.error("Error al cargar personal", error instanceof Error ? error.message : "No se pudo cargar personal");
+      toastError("Error al cargar personal", error instanceof Error ? error.message : "No se pudo cargar personal");
     } finally {
       setLoading(false);
     }
-  }, [effectiveUnitId, get, toast]);
+  }, [effectiveUnitId, get, toastError]);
 
   const fetchRequests = useCallback(async () => {
     if (!canTransfer) {
@@ -118,11 +119,11 @@ export function PersonalPage() {
       setRequests(payload.data);
     } catch (error) {
       setRequests([]);
-      toast.error("Error al cargar solicitudes", error instanceof Error ? error.message : "No se pudieron cargar solicitudes");
+      toastError("Error al cargar solicitudes", error instanceof Error ? error.message : "No se pudieron cargar solicitudes");
     } finally {
       setRequestsLoading(false);
     }
-  }, [canTransfer, effectiveUnitId, get, isUnitScoped, requestScope, toast]);
+  }, [canTransfer, effectiveUnitId, get, isUnitScoped, requestScope, toastError]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -179,11 +180,11 @@ export function PersonalPage() {
   async function submitTransferRequest() {
     if (!selectedPersonal) return;
     if (!targetUnitId) {
-      toast.warning("Seleccione la unidad destino");
+      toastWarning("Seleccione la unidad destino");
       return;
     }
     if (transferReason.trim().length < 6) {
-      toast.warning("Ingrese un motivo de al menos 6 caracteres");
+      toastWarning("Ingrese un motivo de al menos 6 caracteres");
       return;
     }
 
@@ -194,13 +195,13 @@ export function PersonalPage() {
         toUnidadId: targetUnitId,
         motivoSolicitud: transferReason.trim(),
       });
-      toast.success("Solicitud enviada", "La unidad destino tiene 24 horas para aceptar o rechazar.");
+      toastSuccess("Solicitud enviada", "La unidad destino tiene 24 horas para aceptar o rechazar.");
       setSendModalOpen(false);
       setSelectedPersonal(null);
       setRequestScope("salientes");
       await fetchRequests();
     } catch (error) {
-      toast.error("Error", error instanceof Error ? error.message : "No se pudo enviar la solicitud");
+      toastError("Error", error instanceof Error ? error.message : "No se pudo enviar la solicitud");
     } finally {
       setSending(false);
     }
@@ -217,11 +218,11 @@ export function PersonalPage() {
         decision,
         observacionRespuesta,
       });
-      toast.success(decision === "aceptada" ? "Traspaso aceptado" : "Traspaso rechazado");
+      toastSuccess(decision === "aceptada" ? "Traspaso aceptado" : "Traspaso rechazado");
       await fetchRequests();
       await fetchPersonal();
     } catch (error) {
-      toast.error("Error", error instanceof Error ? error.message : "No se pudo resolver la solicitud");
+      toastError("Error", error instanceof Error ? error.message : "No se pudo resolver la solicitud");
     } finally {
       setBusyRequestId(null);
     }
