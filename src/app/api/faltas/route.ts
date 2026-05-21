@@ -72,9 +72,15 @@ export async function POST(request: NextRequest) {
 
     const input = parsed.data;
     const userIsUnitScoped = USER_ROLES_UNIT_SCOPE.has(actor.role);
+    const modoRegistro = input.modoRegistro ?? "actual";
+    const isHistoricalRegistration = modoRegistro === "historico";
 
     if (!input.personalId || !input.unidadId) {
       return badRequest("personalId y unidadId son requeridos");
+    }
+
+    if (isHistoricalRegistration && actor.role !== "super_admin") {
+      return forbidden("Solo super_admin puede registrar sanciones historicas");
     }
 
     if (userIsUnitScoped && actor.unidadId !== input.unidadId) {
@@ -104,9 +110,18 @@ export async function POST(request: NextRequest) {
       const fechaSancion = parseFechaSancion(input.fechaSancion);
       const fechaSancionTs = Timestamp.fromDate(fechaSancion);
       const window = buildReincidenciaWindow(input.fechaSancion);
-      const unidadSancionId = safeString(actor.unidadId ?? input.unidadId).trim();
-      const unidadSancionNombre = safeString(actor.unidadNombre ?? personal.unidadNombre).trim();
+      const unidadSancionId = safeString(userIsUnitScoped ? actor.unidadId : input.unidadId).trim();
       const isSancionEscalada = isReincidenciaEscalada(input.articulo, input.inciso);
+
+      let unidadSancionNombre = safeString(userIsUnitScoped ? actor.unidadNombre : "").trim();
+      if (!unidadSancionNombre) {
+        const unidadSancionSnap = await tx.get(adminDb.collection("unidades").doc(unidadSancionId));
+        if (!unidadSancionSnap.exists) {
+          throw new Error("UNIDAD_DATA_MISSING");
+        }
+        const unidadSancion = unidadSancionSnap.data()!;
+        unidadSancionNombre = safeString(unidadSancion.nombre).trim();
+      }
 
       if (!unidadSancionId || !unidadSancionNombre) {
         throw new Error("UNIDAD_DATA_MISSING");
@@ -124,6 +139,26 @@ export async function POST(request: NextRequest) {
 
       if (!personalUnidadId || !personalUnidadNombre || !personalCi || !personalNombreCompleto || !personalGrado) {
         throw new Error("PERSONAL_DATA_INCOMPLETE");
+      }
+
+      let unidadEfectivoId = personalUnidadId;
+      let unidadEfectivoNombre = personalUnidadNombre;
+
+      if (isHistoricalRegistration) {
+        unidadEfectivoId = safeString(input.unidadEfectivoHistoricaId).trim();
+        if (!unidadEfectivoId) {
+          throw new Error("HISTORICAL_UNIT_REQUIRED");
+        }
+
+        const unidadHistoricaSnap = await tx.get(adminDb.collection("unidades").doc(unidadEfectivoId));
+        if (!unidadHistoricaSnap.exists) {
+          throw new Error("HISTORICAL_UNIT_NOT_FOUND");
+        }
+        const unidadHistorica = unidadHistoricaSnap.data()!;
+        unidadEfectivoNombre = safeString(unidadHistorica.nombre).trim();
+        if (!unidadEfectivoNombre) {
+          throw new Error("HISTORICAL_UNIT_NOT_FOUND");
+        }
       }
 
       let reincidenciaOrigen: Record<string, unknown> | null = null;
@@ -207,8 +242,8 @@ export async function POST(request: NextRequest) {
           grado: personalGrado,
           unidadIntentoId: unidadSancionId,
           unidadIntentoNombre: unidadSancionNombre,
-          unidadEfectivoId: personalUnidadId,
-          unidadEfectivoNombre: personalUnidadNombre,
+          unidadEfectivoId,
+          unidadEfectivoNombre,
           articuloIntentado: input.articulo,
           incisoIntentado: input.inciso,
           fechaSancionIntentada: fechaSancionTs,
@@ -271,8 +306,8 @@ export async function POST(request: NextRequest) {
         unidadNombre: unidadSancionNombre,
         unidadSancionId,
         unidadSancionNombre,
-        unidadEfectivoId: personalUnidadId,
-        unidadEfectivoNombre: personalUnidadNombre,
+        unidadEfectivoId,
+        unidadEfectivoNombre,
         ci: personalCi,
         nombreCompleto: personalNombreCompleto,
         grado: personalGrado,
@@ -282,6 +317,10 @@ export async function POST(request: NextRequest) {
         memorandum: input.memorandum,
         motivo: input.motivo,
         tipoRegistro: isSancionEscalada ? "reincidencia_escalada" : "falta_directa",
+        modoRegistro,
+        cargaHistorica: isHistoricalRegistration,
+        unidadActualEfectivoId: personalUnidadId,
+        unidadActualEfectivoNombre: personalUnidadNombre,
         reincidencia: isSancionEscalada,
         reincidenciaReferencia: reincidenciaOrigen,
         reincidenciaOrigen,
@@ -309,6 +348,9 @@ export async function POST(request: NextRequest) {
         entity: "falta",
         entityId: faltaRef.id,
         unidadId: unidadSancionId,
+        modoRegistro,
+        cargaHistorica: isHistoricalRegistration,
+        unidadEfectivoHistoricaId: isHistoricalRegistration ? unidadEfectivoId : null,
         before: null,
         after: faltaPayload,
         createdAt: Timestamp.now(),
@@ -362,6 +404,14 @@ export async function POST(request: NextRequest) {
 
       if (error.message === "UNIDAD_DATA_MISSING") {
         return badRequest("No se pudo determinar la unidad de sanción. Verifique el usuario y el personal seleccionado");
+      }
+
+      if (error.message === "HISTORICAL_UNIT_REQUIRED") {
+        return badRequest("Debe seleccionar la unidad donde prestaba funciones al momento de la sancion");
+      }
+
+      if (error.message === "HISTORICAL_UNIT_NOT_FOUND") {
+        return badRequest("La unidad historica seleccionada no existe o no tiene nombre oficial");
       }
 
       if (error.message === "PERSONAL_DATA_INCOMPLETE") {

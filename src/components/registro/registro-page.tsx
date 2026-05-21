@@ -52,6 +52,8 @@ export function RegistroPage() {
   const toast = useToast();
 
   const [selectedUnitId, setSelectedUnitId] = useState("");
+  const [registroMode, setRegistroMode] = useState<"actual" | "historico">("actual");
+  const [historicalDutyUnitId, setHistoricalDutyUnitId] = useState("");
   const [personalRows, setPersonalRows] = useState<Personal[]>([]);
   const [searchText, setSearchText] = useState("");
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
@@ -73,7 +75,10 @@ export function RegistroPage() {
 
   const canSelectUnit = sessionUser ? !isUnitScopedRole(sessionUser.role) : false;
   const isGlobalActor = sessionUser ? isGlobalRole(sessionUser.role) : false;
+  const isSuperAdmin = sessionUser?.role === "super_admin";
+  const isHistoricalMode = isSuperAdmin && registroMode === "historico";
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
+  const personalSearchUnitId = isHistoricalMode ? "" : effectiveUnitId;
 
   const selectedPersonal = useMemo(() => personalRows.find((r) => r.id === selectedPersonalId) ?? null, [personalRows, selectedPersonalId]);
   const selectedArticle = useMemo(() => DISCIPLINARY_CATALOG.find((a) => a.id === form.articuloId) ?? null, [form.articuloId]);
@@ -106,15 +111,15 @@ export function RegistroPage() {
   }, [get, effectiveUnitId]);
 
   useEffect(() => {
-    if (!effectiveUnitId) return;
+    if (isHistoricalMode || !effectiveUnitId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshPersonal("", effectiveUnitId);
-  }, [effectiveUnitId, refreshPersonal]);
+  }, [effectiveUnitId, refreshPersonal, isHistoricalMode]);
 
   function handleSearchPersonal(e: FormEvent) {
     e.preventDefault();
     void (async () => {
-      const result = await refreshPersonal(searchText, effectiveUnitId);
+      const result = await refreshPersonal(searchText, personalSearchUnitId);
       if (result && !result.ok) {
         toast.error("Error al buscar personal", result.message);
       }
@@ -123,6 +128,22 @@ export function RegistroPage() {
 
   function handleUnitChange(unitId: string) {
     setSelectedUnitId(unitId);
+    if (isHistoricalMode) {
+      return;
+    }
+
+    setSearchText("");
+    setSelectedPersonalId("");
+    setPersonalRows([]);
+    setTransferTargetUnitId("");
+    setOrigenRows([]);
+    setReincidenciaOrigen(null);
+  }
+
+  function handleRegistroModeChange(mode: "actual" | "historico") {
+    setRegistroMode(mode);
+    setSelectedUnitId("");
+    setHistoricalDutyUnitId("");
     setSearchText("");
     setSelectedPersonalId("");
     setPersonalRows([]);
@@ -189,7 +210,8 @@ export function RegistroPage() {
   function handlePreSubmit(e: FormEvent) {
     e.preventDefault();
     if (!selectedPersonal) { toast.warning("Seleccione un efectivo"); return; }
-    if (!effectiveUnitId) { toast.warning("Seleccione la unidad que impone la sanción"); return; }
+    if (!effectiveUnitId) { toast.warning(isHistoricalMode ? "Seleccione la unidad que impuso la sanción" : "Seleccione la unidad que impone la sanción"); return; }
+    if (isHistoricalMode && !historicalDutyUnitId) { toast.warning("Seleccione la unidad donde prestaba funciones al momento de la sanción"); return; }
     if (!selectedArticle || !form.inciso) { toast.warning("Seleccione artículo e inciso"); return; }
     if (isSancionEscalada && !reincidenciaOrigen) {
       toast.warning("Seleccione la falta del artículo anterior que origina la reincidencia");
@@ -212,6 +234,8 @@ export function RegistroPage() {
         fechaSancion: form.fechaSancion,
         memorandum: form.memorandum,
         motivo: form.motivo,
+        modoRegistro: isHistoricalMode ? "historico" : "actual",
+        unidadEfectivoHistoricaId: isHistoricalMode ? historicalDutyUnitId : undefined,
         reincidenciaOrigen,
       });
       toast.success("Sanción registrada", "El registro se guardó correctamente.");
@@ -321,15 +345,54 @@ export function RegistroPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {isSuperAdmin && (
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-base font-bold text-[var(--navy-900)]">Tipo de registro</h3>
+              <p className="text-sm text-[var(--navy-500)]">
+                Use histórico para cargar sanciones pasadas sin cambiar la unidad actual del efectivo.
+              </p>
+            </div>
+            <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl self-start">
+              {([
+                ["actual", "Actual"],
+                ["historico", "Histórico"],
+              ] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleRegistroModeChange(mode)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${registroMode === mode ? "bg-white shadow-sm text-[var(--navy-900)]" : "text-[var(--navy-500)]"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Unit selector */}
       <Card className="p-5">
         {canSelectUnit ? (
-          <Select
-            label="Unidad que impone la sanción"
-            value={selectedUnitId}
-            onChange={(e) => handleUnitChange(e.target.value)}
-            options={sanctionUnitOptions}
-          />
+          <div className="space-y-3">
+            {isHistoricalMode && (
+              <div className="rounded-xl border border-[var(--info-100)] bg-[var(--info-50)] p-3">
+                <p className="text-sm font-semibold text-[var(--info-600)]">Carga histórica</p>
+                <p className="mt-1 text-xs text-[var(--info-600)]">
+                  La sanción se registrará con fecha y unidad histórica, sin modificar la unidad actual del efectivo.
+                </p>
+              </div>
+            )}
+            <Select
+              label={isHistoricalMode ? "Unidad que impuso la sanción" : "Unidad que impone la sanción"}
+              value={selectedUnitId}
+              onChange={(e) => handleUnitChange(e.target.value)}
+              options={isHistoricalMode ? unitOptions : sanctionUnitOptions}
+              placeholder={isHistoricalMode ? "Seleccionar unidad sancionadora" : undefined}
+            />
+          </div>
         ) : (
           <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--navy-50)]">
             {Icons.building({ size: 18, className: "text-[var(--navy-400)]" })}
@@ -344,7 +407,11 @@ export function RegistroPage() {
       {/* Personnel search */}
       <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-3">Seleccionar Efectivo</h3>
-        {canSelectUnit && !selectedUnitId && (
+        {isHistoricalMode ? (
+          <p className="mb-3 text-sm text-[var(--navy-500)]">
+            Buscando personal en todas las unidades para carga histórica.
+          </p>
+        ) : canSelectUnit && !selectedUnitId && (
           <p className="mb-3 text-sm text-[var(--navy-500)]">
             Buscando personal en todas las unidades. Para registrar la sanción, seleccione una unidad concreta que la impone.
           </p>
@@ -389,7 +456,7 @@ export function RegistroPage() {
               )}
             </button>
           )) : (
-            <EmptyState title="Sin resultados" description={canSelectUnit && !selectedUnitId ? "Busque por CI, nombre o apellido en todas las unidades." : "Busque por nombre o CI."} />
+            <EmptyState title="Sin resultados" description={(canSelectUnit && !selectedUnitId) || isHistoricalMode ? "Busque por CI, nombre o apellido en todas las unidades." : "Busque por nombre o CI."} />
           )}
         </div>
       </Card>
@@ -397,7 +464,14 @@ export function RegistroPage() {
       {/* Fault form */}
       <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-4">Datos de la Sanción</h3>
-        {selectedPersonal?.transferRequired && (
+        {isHistoricalMode && selectedPersonal && (
+          <div className="mb-4 rounded-xl border border-[var(--info-100)] bg-[var(--info-50)] p-3">
+            <p className="text-sm text-[var(--info-600)]">
+              Unidad actual del efectivo: <strong>{selectedPersonal.unidadNombre || getUnitName(selectedPersonal.unidadId)}</strong>. Este dato no será modificado.
+            </p>
+          </div>
+        )}
+        {selectedPersonal?.transferRequired && !isHistoricalMode && (
           <div className="mb-4 p-3 rounded-xl bg-[var(--warning-50)] border border-[var(--warning-100)] space-y-3">
             <p className="text-sm text-[var(--warning-600)]">
               Este funcionario está destinado en <strong>{selectedPersonal.unidadNombre}</strong>. Para aplicarle una falta en su jurisdicción, debe transferirlo primero.
@@ -416,7 +490,7 @@ export function RegistroPage() {
             )}
           </div>
         )}
-        {isGlobalActor && selectedPersonal && (
+        {isGlobalActor && selectedPersonal && !isHistoricalMode && (
           <div className="mb-4 p-3 rounded-xl bg-[var(--info-50)] border border-[var(--info-100)] space-y-3">
             <p className="text-sm text-[var(--info-600)]">
               El efectivo pertenece a <strong>{selectedPersonal.unidadNombre || getUnitName(selectedPersonal.unidadId)}</strong>. Puede reasignarlo a otra unidad destino.
@@ -444,6 +518,16 @@ export function RegistroPage() {
           </div>
         )}
         <form className="space-y-4" onSubmit={handlePreSubmit}>
+          {isHistoricalMode && (
+            <Select
+              label="Unidad donde prestaba funciones al momento de la sanción"
+              value={historicalDutyUnitId}
+              onChange={(e) => setHistoricalDutyUnitId(e.target.value)}
+              options={unitOptions}
+              placeholder="Seleccionar unidad histórica del efectivo"
+              required
+            />
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <Select
               label="Artículo"
@@ -514,7 +598,7 @@ export function RegistroPage() {
             onChange={(e) => setForm((p) => ({ ...p, motivo: e.target.value }))}
             required
           />
-          <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!selectedPersonal || !!selectedPersonal.transferRequired} className="w-full" icon={Icons.check({ size: 18 })}>
+          <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!selectedPersonal || (!!selectedPersonal.transferRequired && !isHistoricalMode)} className="w-full" icon={Icons.check({ size: 18 })}>
             Registrar Sanción
           </Button>
         </form>
@@ -539,11 +623,30 @@ export function RegistroPage() {
             <p className="text-sm text-[var(--warning-600)]">Revise los datos antes de confirmar. Esta acción quedará registrada en el sistema de auditoría.</p>
           </div>
           <div className="grid gap-3">
+            {isHistoricalMode && (
+              <div className="p-3 rounded-xl bg-[var(--info-50)] border border-[var(--info-100)]">
+                <p className="text-xs text-[var(--info-600)]">Tipo de registro</p>
+                <p className="text-sm font-semibold text-[var(--navy-900)]">Histórico</p>
+                <p className="mt-1 text-xs text-[var(--info-600)]">La unidad actual del efectivo no será modificada.</p>
+              </div>
+            )}
             <div className="p-3 rounded-xl bg-[var(--navy-50)]">
               <p className="text-xs text-[var(--navy-400)]">Efectivo</p>
               <p className="text-sm font-semibold text-[var(--navy-900)]">{selectedPersonal?.nombreCompleto}</p>
               <p className="text-xs text-[var(--navy-500)]">CI: {selectedPersonal?.ci}</p>
             </div>
+            {isHistoricalMode && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-[var(--navy-50)]">
+                  <p className="text-xs text-[var(--navy-400)]">Unidad sancionadora</p>
+                  <p className="text-sm font-semibold text-[var(--navy-900)]">{getUnitName(selectedUnitId)}</p>
+                </div>
+                <div className="p-3 rounded-xl bg-[var(--navy-50)]">
+                  <p className="text-xs text-[var(--navy-400)]">Unidad histórica del efectivo</p>
+                  <p className="text-sm font-semibold text-[var(--navy-900)]">{getUnitName(historicalDutyUnitId)}</p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-[var(--navy-50)]">
                 <p className="text-xs text-[var(--navy-400)]">Tipificación</p>

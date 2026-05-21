@@ -41,6 +41,8 @@ export const createFaltaSchema = z
     fechaSancion: isoDateSchema,
     memorandum: z.string().transform(toTitleCaseEs).pipe(z.string().min(1)),
     motivo: z.string().transform(normalizeFreeText).pipe(z.string().min(3)),
+    modoRegistro: z.enum(["actual", "historico"]).optional(),
+    unidadEfectivoHistoricaId: z.string().optional(),
     reincidenciaOrigen: reincidenciaOrigenSchema.optional().nullable(),
   })
   .superRefine((value, ctx) => {
@@ -73,6 +75,14 @@ export const createFaltaSchema = z
           message: "El articulo base no corresponde a la sancion superior seleccionada",
         });
       }
+    }
+
+    if (value.modoRegistro === "historico" && !value.unidadEfectivoHistoricaId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unidadEfectivoHistoricaId"],
+        message: "Debe seleccionar la unidad donde prestaba funciones al momento de la sancion",
+      });
     }
   });
 
