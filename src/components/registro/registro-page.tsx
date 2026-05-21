@@ -79,6 +79,10 @@ export function RegistroPage() {
   const selectedArticle = useMemo(() => DISCIPLINARY_CATALOG.find((a) => a.id === form.articuloId) ?? null, [form.articuloId]);
   const isSancionEscalada = selectedArticle ? isReincidenciaEscalada(selectedArticle.label, form.inciso) : false;
   const articuloBaseEsperado = selectedArticle ? getArticuloBaseForSancionEscalada(selectedArticle.label, form.inciso) : null;
+  const sanctionUnitOptions = useMemo(
+    () => [{ value: "", label: "Todas las unidades" }, ...unitOptions],
+    [unitOptions],
+  );
 
   const refreshPersonal = useCallback(async (q = "", unidad = effectiveUnitId) => {
     if (!unidad && !q.trim()) return;
@@ -119,6 +123,7 @@ export function RegistroPage() {
 
   function handleUnitChange(unitId: string) {
     setSelectedUnitId(unitId);
+    setSearchText("");
     setSelectedPersonalId("");
     setPersonalRows([]);
     setTransferTargetUnitId("");
@@ -184,7 +189,7 @@ export function RegistroPage() {
   function handlePreSubmit(e: FormEvent) {
     e.preventDefault();
     if (!selectedPersonal) { toast.warning("Seleccione un efectivo"); return; }
-    if (!effectiveUnitId) { toast.warning("Seleccione la unidad"); return; }
+    if (!effectiveUnitId) { toast.warning("Seleccione la unidad que impone la sanción"); return; }
     if (!selectedArticle || !form.inciso) { toast.warning("Seleccione artículo e inciso"); return; }
     if (isSancionEscalada && !reincidenciaOrigen) {
       toast.warning("Seleccione la falta del artículo anterior que origina la reincidencia");
@@ -323,8 +328,7 @@ export function RegistroPage() {
             label="Unidad que impone la sanción"
             value={selectedUnitId}
             onChange={(e) => handleUnitChange(e.target.value)}
-            options={unitOptions}
-            placeholder="Seleccionar unidad"
+            options={sanctionUnitOptions}
           />
         ) : (
           <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--navy-50)]">
@@ -340,6 +344,11 @@ export function RegistroPage() {
       {/* Personnel search */}
       <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-3">Seleccionar Efectivo</h3>
+        {canSelectUnit && !selectedUnitId && (
+          <p className="mb-3 text-sm text-[var(--navy-500)]">
+            Buscando personal en todas las unidades. Para registrar la sanción, seleccione una unidad concreta que la impone.
+          </p>
+        )}
         <form className="flex gap-2 mb-3" onSubmit={handleSearchPersonal}>
           <Input
             placeholder="Buscar por CI, nombre o apellido"
@@ -380,7 +389,7 @@ export function RegistroPage() {
               )}
             </button>
           )) : (
-            <EmptyState title="Sin resultados" description={effectiveUnitId ? "Busque por nombre o CI." : "Seleccione una unidad primero."} />
+            <EmptyState title="Sin resultados" description={canSelectUnit && !selectedUnitId ? "Busque por CI, nombre o apellido en todas las unidades." : "Busque por nombre o CI."} />
           )}
         </div>
       </Card>
