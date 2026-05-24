@@ -5,6 +5,7 @@ import { getRequestUser } from "@/lib/auth/request-user";
 import {
   USER_ROLES_CAN_WRITE_PERSONAL,
   USER_ROLES_GLOBAL,
+  USER_ROLES_GLOBAL_READ,
   USER_ROLES_UNIT_SCOPE,
 } from "@/lib/domain/constants";
 import { canManageTransfers } from "@/lib/domain/roles";
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     if (actorIsUnit && !q) {
       query = query.where("unidadId", "==", actor.unidadId);
-    } else if (unidadIdParam && USER_ROLES_GLOBAL.has(actor.role)) {
+    } else if (unidadIdParam && USER_ROLES_GLOBAL_READ.has(actor.role)) {
       query = query.where("unidadId", "==", unidadIdParam);
     }
 

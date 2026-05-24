@@ -7,7 +7,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Card, Badge, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
-import { useAuth, isUnitScopedRole } from "@/hooks/use-auth";
+import { useAuth, canViewGlobalPersonHistory, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 import { useToast } from "@/hooks/use-toast";
@@ -103,9 +103,10 @@ export function HistorialPage() {
   const [requestSubmitting, setRequestSubmitting] = useState(false);
 
   const canSelectUnit = sessionUser ? !isUnitScopedRole(sessionUser.role) : false;
-  const canUseGlobalPersonHistory = sessionUser?.role === "super_admin";
+  const canUseGlobalPersonHistory = sessionUser ? canViewGlobalPersonHistory(sessionUser.role) : false;
   const activeHistoryScope: HistoryScope = canUseGlobalPersonHistory ? historyScope : "unit";
   const canRequestDeletion = sessionUser ? isUnitScopedRole(sessionUser.role) && activeHistoryScope === "unit" : false;
+  const canViewDeletionRequests = sessionUser ? isUnitScopedRole(sessionUser.role) || isGlobalRole(sessionUser.role) : false;
   const isPersonScope = canUseGlobalPersonHistory && activeHistoryScope === "person";
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
 
@@ -211,16 +212,16 @@ export function HistorialPage() {
   }, [isPersonScope, selectedPersonal, refreshFaltasByPersonal, estadoFilter]);
 
   useEffect(() => {
-    if (!sessionUser) return;
+    if (!sessionUser || !canViewDeletionRequests) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSolicitudes("pendiente");
-  }, [sessionUser, refreshSolicitudes]);
+  }, [sessionUser, canViewDeletionRequests, refreshSolicitudes]);
 
   useEffect(() => {
-    if (!sessionUser) return;
+    if (!sessionUser || !canViewDeletionRequests) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSolicitudes(solicitudesFilter);
-  }, [sessionUser, solicitudesFilter, refreshSolicitudes]);
+  }, [sessionUser, canViewDeletionRequests, solicitudesFilter, refreshSolicitudes]);
 
   function resetHistoryRows() {
     setFaltasRows([]);
@@ -633,6 +634,7 @@ export function HistorialPage() {
         </Card>
       )}
 
+      {canViewDeletionRequests && (
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
@@ -690,6 +692,7 @@ export function HistorialPage() {
           </div>
         )}
       </Card>
+      )}
 
       <Modal
         open={requestModalOpen}

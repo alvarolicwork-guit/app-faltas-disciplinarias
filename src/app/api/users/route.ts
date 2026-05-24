@@ -18,7 +18,7 @@ function forbidden(msg = "Permisos insuficientes") {
 
 const UNIT_ROLES = new Set(["admin_unidad", "operador_unidad"]);
 const USER_ROLES_ALLOWED = new Set<string>(USER_ROLES);
-const ADMIN_DPTO_ASSIGNABLE_ROLES = new Set(["operador_unidad", "admin_unidad", "admin_dpto"]);
+const ADMIN_DPTO_ASSIGNABLE_ROLES = new Set(["operador_unidad", "admin_unidad", "visor_dpto", "admin_dpto"]);
 
 function normalizeStatus(raw: unknown): "activo" | "bloqueado" | "baja" {
   const value = String(raw ?? "activo").trim().toLowerCase();

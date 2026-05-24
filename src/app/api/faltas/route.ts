@@ -7,6 +7,7 @@ import {
   USER_ROLES_GLOBAL,
   USER_ROLES_UNIT_SCOPE,
 } from "@/lib/domain/constants";
+import { canViewGlobalPersonHistory } from "@/lib/domain/roles";
 import {
   canEscalateFromArticulo,
   getArticuloBaseForSancionEscalada,
@@ -484,8 +485,8 @@ export async function GET(request: NextRequest) {
     const isGlobalPersonScope = scope === "global_person";
 
     if (isGlobalPersonScope) {
-      if (actor.role !== "super_admin") {
-        return forbidden("Solo super admin puede consultar historial global por efectivo");
+      if (!canViewGlobalPersonHistory(actor.role)) {
+        return forbidden("No tiene permisos para consultar historial global por efectivo");
       }
 
       if (!personalId) {

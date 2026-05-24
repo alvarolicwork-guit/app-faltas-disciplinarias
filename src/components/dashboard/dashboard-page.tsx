@@ -5,7 +5,7 @@ import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Card, Skeleton, EmptyState, Badge } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
-import { useAuth, isGlobalRole } from "@/hooks/use-auth";
+import { useAuth, canReadGlobalInfo } from "@/hooks/use-auth";
 import { useUnidades } from "@/hooks/use-unidades";
 import { useDataCache } from "@/hooks/use-data-cache";
 
@@ -28,7 +28,7 @@ export function DashboardPage() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const { unidades } = useUnidades();
 
-  const isGlobal = isGlobalRole(sessionUser?.role ?? "");
+  const isGlobal = canReadGlobalInfo(sessionUser?.role ?? "");
   const unitId = sessionUser?.unidadId ?? "";
 
   const fetchStats = useCallback(async (options?: { force?: boolean }) => {

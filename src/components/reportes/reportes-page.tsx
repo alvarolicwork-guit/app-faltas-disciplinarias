@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card, Badge, EmptyState, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
-import { useAuth, isGlobalRole } from "@/hooks/use-auth";
+import { useAuth, canReadGlobalInfo } from "@/hooks/use-auth";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 
@@ -25,7 +25,7 @@ export function ReportesPage() {
   const { sessionUser } = useAuth();
   const { fetchWithCache } = useDataCache();
   const { unitOptions: rawUnitOptions } = useUnidades();
-  const isGlobal = isGlobalRole(sessionUser?.role ?? "");
+  const isGlobal = canReadGlobalInfo(sessionUser?.role ?? "");
 
   const [unidadId, setUnidadId] = useState(isGlobal ? "" : (sessionUser?.unidadId ?? ""));
   const [fechaInicio, setFechaInicio] = useState(() => {

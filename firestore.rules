@@ -12,10 +12,11 @@ service cloud.firestore {
 
     function isSuper() { return role() == 'super_admin'; }
     function isDpto() { return role() in ['admin_dpto', 'super_admin']; }
+    function isDptoReader() { return role() in ['visor_dpto', 'admin_dpto', 'super_admin']; }
     function isUnidadScope() { return role() in ['operador_unidad', 'admin_unidad']; }
     function canWriteFaltas() { return role() in ['admin_unidad', 'admin_dpto', 'super_admin']; }
     function canReadUnidad(unidadId) {
-      return isDpto() || (isUnidadScope() && unidadId == unidad());
+      return isDptoReader() || (isUnidadScope() && unidadId == unidad());
     }
 
     function sameUnidad(resourceUnidadId) {
@@ -66,7 +67,7 @@ service cloud.firestore {
     }
 
     match /unidades/{id} {
-      allow read: if isSignedIn() && (isDpto() || (isUnidadScope() && resource.data.id == unidad()));
+      allow read: if isSignedIn() && (isDptoReader() || (isUnidadScope() && resource.data.id == unidad()));
       allow create, update, delete: if isSignedIn() && isDpto();
     }
   }

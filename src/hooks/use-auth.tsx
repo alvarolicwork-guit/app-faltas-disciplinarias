@@ -18,6 +18,8 @@ import {
 
 import { clientAuth } from "@/lib/firebase/client";
 import {
+  canReadGlobalInfo,
+  canViewGlobalPersonHistory,
   isGlobalRole,
   isSuperAdmin,
   isUnitScopedRole,
@@ -184,4 +186,4 @@ export function useAuth(): AuthContextValue {
 }
 
 /* ─── Helpers ─── */
-export { isGlobalRole, isSuperAdmin, isUnitScopedRole };
+export { canReadGlobalInfo, canViewGlobalPersonHistory, isGlobalRole, isSuperAdmin, isUnitScopedRole };

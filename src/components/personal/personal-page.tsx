@@ -8,7 +8,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useApi } from "@/hooks/use-api";
-import { useAuth, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
+import { useAuth, canReadGlobalInfo, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
 import { useUnidades } from "@/hooks/use-unidades";
@@ -79,6 +79,7 @@ export function PersonalPage() {
   const [requestsUpdatedAt, setRequestsUpdatedAt] = useState<number | null>(null);
 
   const isUnitScoped = sessionUser ? isUnitScopedRole(sessionUser.role) : false;
+  const canReadGlobal = sessionUser ? canReadGlobalInfo(sessionUser.role) : false;
   const canTransfer = sessionUser ? sessionUser.role === "admin_unidad" || isGlobalRole(sessionUser.role) : false;
   const sessionUnitId = sessionUser?.unidadId ?? "";
   const effectiveUnitId = isUnitScoped ? (sessionUser?.unidadId ?? "") : selectedUnitId;
@@ -286,7 +287,7 @@ export function PersonalPage() {
               Actualizar
             </Button>
           )}
-          {!isUnitScoped && (
+          {!isUnitScoped && canReadGlobal && (
             <div className="w-full md:w-[360px]">
               <Select
                 label="Unidad"
