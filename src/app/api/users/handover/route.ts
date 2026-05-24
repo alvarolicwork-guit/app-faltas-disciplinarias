@@ -2,11 +2,11 @@ import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
+import { canHandoverUnitUsers } from "@/lib/domain/roles";
 import { resolveRangoPolicial } from "@/lib/domain/rangos-policiales";
 import { normalizeWhitespace, toTitleCaseEs } from "@/lib/domain/text-normalization";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 
-const CAN_MANAGE = new Set(["admin_dpto", "super_admin"]);
 const UNIT_ROLES = new Set(["admin_unidad", "operador_unidad"]);
 
 function unauthorized() {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
-    if (!CAN_MANAGE.has(actor.role)) return forbidden();
+    if (!canHandoverUnitUsers(actor.role)) return forbidden();
 
     const body = await request.json();
     const unidadId = normalizeWhitespace(String(body?.unidadId ?? ""));

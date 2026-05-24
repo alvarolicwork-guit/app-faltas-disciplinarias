@@ -13,6 +13,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useUnidades } from "@/hooks/use-unidades";
 import { USER_ROLES } from "@/lib/domain/constants";
 import { RANGOS_POLICIALES } from "@/lib/domain/rangos-policiales";
+import {
+  canCreateUsers,
+  canDeactivateUsers,
+  canHandoverUnitUsers,
+  canManageSuperAdmin,
+} from "@/lib/domain/roles";
 
 type UserRow = {
   uid: string;
@@ -85,6 +91,11 @@ export function UsuariosPage() {
   }, [fetchUsers]);
 
   function openCreate() {
+    if (!canCreateCurrentUser) {
+      toast.warning("Solo super admin puede crear usuarios");
+      return;
+    }
+
     setEditUser(null);
     setForm({
       email: "",
@@ -101,6 +112,11 @@ export function UsuariosPage() {
   }
 
   function openEdit(user: UserRow) {
+    if (!canEditTarget(user)) {
+      toast.warning("Usuario protegido", "admin_dpto no puede modificar cuentas super admin.");
+      return;
+    }
+
     setEditUser(user);
     setForm({
       email: user.email,
@@ -117,6 +133,11 @@ export function UsuariosPage() {
   }
 
   function openHandover() {
+    if (!canHandoverCurrentUser) {
+      toast.warning("No tiene permisos para relevar usuarios");
+      return;
+    }
+
     setHandover({
       unidadId: "",
       role: "admin_unidad",
@@ -132,6 +153,11 @@ export function UsuariosPage() {
   }
 
   function openDeactivate(user: UserRow) {
+    if (!canDeactivateCurrentUser) {
+      toast.warning("Solo super admin puede dar de baja usuarios");
+      return;
+    }
+
     setDeactivateTarget(user);
     setDeactivateReason("");
     setDeactivateOpen(true);
@@ -145,12 +171,15 @@ export function UsuariosPage() {
   }
 
   function validateUserForm(): string | null {
+    if (!editUser && !canCreateCurrentUser) return "Solo super admin puede crear usuarios";
+    if (editUser && !canEditTarget(editUser)) return "No puede modificar este usuario";
     if (!editUser && !form.email.trim()) return "Ingrese el correo electronico";
     if (!editUser && form.password.length < 8) return "Ingrese una contrasena de al menos 8 caracteres";
     if (!form.grado) return "Seleccione el grado";
     if (!form.nombres.trim()) return "Ingrese nombres";
     if (!form.apellidos.trim()) return "Ingrese apellidos";
     if (!form.role) return "Seleccione el rol";
+    if (isAdminDpto && form.role === "super_admin") return "admin_dpto no puede asignar rol super admin";
     if (needsUnit && !form.unidadId) return "Seleccione la unidad";
     return null;
   }
@@ -270,10 +299,22 @@ export function UsuariosPage() {
     }
   }
 
-  const roleOptions = USER_ROLES.map((r) => ({ value: r, label: r.replace(/_/g, " ") }));
+  const actorRole = sessionUser?.role ?? "";
+  const isAdminDpto = actorRole === "admin_dpto";
+  const canCreateCurrentUser = canCreateUsers(actorRole);
+  const canDeactivateCurrentUser = canDeactivateUsers(actorRole);
+  const canHandoverCurrentUser = canHandoverUnitUsers(actorRole);
+  const canManageSuperAdminCurrentUser = canManageSuperAdmin(actorRole);
+  const roleOptions = USER_ROLES
+    .filter((r) => canManageSuperAdminCurrentUser || r !== "super_admin")
+    .map((r) => ({ value: r, label: r.replace(/_/g, " ") }));
   const rankOptions = RANGOS_POLICIALES.map((rank) => ({ value: rank, label: rank }));
   const needsUnit = form.role === "operador_unidad" || form.role === "admin_unidad";
-  const isSuperAdmin = sessionUser?.role === "super_admin";
+
+  function canEditTarget(user: UserRow): boolean {
+    if (user.role === "super_admin" && !canManageSuperAdminCurrentUser) return false;
+    return true;
+  }
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -284,15 +325,24 @@ export function UsuariosPage() {
             <p className="text-sm text-[var(--navy-400)]">{users.length} usuarios registrados</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" icon={Icons.usuarios({ size: 16 })} onClick={openHandover}>Relevar Usuario</Button>
-            <Button variant="primary" icon={Icons.plus({ size: 16 })} onClick={openCreate}>Crear Usuario</Button>
+            {canHandoverCurrentUser && (
+              <Button variant="outline" icon={Icons.usuarios({ size: 16 })} onClick={openHandover}>Relevar Usuario</Button>
+            )}
+            {canCreateCurrentUser && (
+              <Button variant="primary" icon={Icons.plus({ size: 16 })} onClick={openCreate}>Crear Usuario</Button>
+            )}
           </div>
         </div>
 
         {loading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
         ) : users.length === 0 ? (
-          <EmptyState icon={Icons.usuarios({ size: 40 })} title="Sin usuarios" description="Cree el primer usuario del sistema." action={<Button variant="primary" onClick={openCreate}>Crear Usuario</Button>} />
+          <EmptyState
+            icon={Icons.usuarios({ size: 40 })}
+            title="Sin usuarios"
+            description={canCreateCurrentUser ? "Cree el primer usuario del sistema." : "No existen usuarios registrados."}
+            action={canCreateCurrentUser ? <Button variant="primary" onClick={openCreate}>Crear Usuario</Button> : undefined}
+          />
         ) : (
           <div className="overflow-auto rounded-xl border border-[var(--border)]">
             <table className="min-w-full text-sm">
@@ -322,8 +372,12 @@ export function UsuariosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)} icon={Icons.edit({ size: 14 })}>Editar</Button>
-                        {isSuperAdmin && u.uid !== sessionUser?.uid && u.status !== "baja" && (
+                        {canEditTarget(u) ? (
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(u)} icon={Icons.edit({ size: 14 })}>Editar</Button>
+                        ) : (
+                          <Badge variant="default">Protegido</Badge>
+                        )}
+                        {canDeactivateCurrentUser && u.uid !== sessionUser?.uid && u.status !== "baja" && (
                           <Button
                             variant="ghost"
                             size="sm"

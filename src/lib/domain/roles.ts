@@ -17,3 +17,27 @@ export function canManageTransfers(role: string): boolean {
 export function canRegisterFalta(role: string): boolean {
   return role === "admin_unidad" || role === "admin_dpto" || role === "super_admin";
 }
+
+export function canViewUsers(role: string): boolean {
+  return role === "admin_dpto" || role === "super_admin";
+}
+
+export function canCreateUsers(role: string): boolean {
+  return role === "super_admin";
+}
+
+export function canDeactivateUsers(role: string): boolean {
+  return role === "super_admin";
+}
+
+export function canHandoverUnitUsers(role: string): boolean {
+  return role === "admin_dpto" || role === "super_admin";
+}
+
+export function canEditUserRole(role: string): boolean {
+  return role === "admin_dpto" || role === "super_admin";
+}
+
+export function canManageSuperAdmin(role: string): boolean {
+  return role === "super_admin";
+}

@@ -2,7 +2,9 @@ import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
+import { USER_ROLES } from "@/lib/domain/constants";
 import { resolveRangoPolicial } from "@/lib/domain/rangos-policiales";
+import { canCreateUsers, canDeactivateUsers, canViewUsers } from "@/lib/domain/roles";
 import { normalizeWhitespace, toTitleCaseEs } from "@/lib/domain/text-normalization";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 
@@ -14,8 +16,9 @@ function forbidden(msg = "Permisos insuficientes") {
   return NextResponse.json({ error: msg }, { status: 403 });
 }
 
-const CAN_MANAGE = new Set(["admin_dpto", "super_admin"]);
 const UNIT_ROLES = new Set(["admin_unidad", "operador_unidad"]);
+const USER_ROLES_ALLOWED = new Set<string>(USER_ROLES);
+const ADMIN_DPTO_ASSIGNABLE_ROLES = new Set(["operador_unidad", "admin_unidad", "admin_dpto"]);
 
 function normalizeStatus(raw: unknown): "activo" | "bloqueado" | "baja" {
   const value = String(raw ?? "activo").trim().toLowerCase();
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
-    if (!CAN_MANAGE.has(actor.role)) return forbidden();
+    if (!canViewUsers(actor.role)) return forbidden();
 
     const db = getAdminDb();
     const snap = await db.collection("users").orderBy("email").get();
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
-    if (actor.role !== "super_admin") return forbidden("Solo super_admin puede crear usuarios");
+    if (!canCreateUsers(actor.role)) return forbidden("Solo super_admin puede crear usuarios");
 
     const body = await request.json();
     const email = String(body?.email ?? "").trim().toLowerCase();
@@ -93,6 +96,10 @@ export async function POST(request: NextRequest) {
         { error: "email, password, role, grado, nombres y apellidos son requeridos" },
         { status: 400 },
       );
+    }
+
+    if (!USER_ROLES_ALLOWED.has(role)) {
+      return NextResponse.json({ error: "Rol invalido" }, { status: 400 });
     }
 
     const rango = resolveRangoPolicial(gradoRaw);
@@ -167,7 +174,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
-    if (!CAN_MANAGE.has(actor.role)) return forbidden();
+    if (!canViewUsers(actor.role)) return forbidden();
 
     const uid = request.nextUrl.searchParams.get("uid");
     if (!uid) return NextResponse.json({ error: "uid requerido" }, { status: 400 });
@@ -186,13 +193,21 @@ export async function PATCH(request: NextRequest) {
       return forbidden("admin_dpto no puede modificar un super_admin");
     }
 
+    if (actor.role === "admin_dpto" && uid === actor.uid && body.role !== undefined) {
+      return forbidden("admin_dpto no puede modificar su propio rol");
+    }
+
     const updates: Record<string, unknown> = { updatedAt: Timestamp.now() };
 
     if (body.role) {
-      if (actor.role === "admin_dpto" && body.role === "super_admin") {
+      const requestedRole = String(body.role).trim();
+      if (!USER_ROLES_ALLOWED.has(requestedRole)) {
+        return NextResponse.json({ error: "Rol invalido" }, { status: 400 });
+      }
+      if (actor.role === "admin_dpto" && !ADMIN_DPTO_ASSIGNABLE_ROLES.has(requestedRole)) {
         return forbidden("admin_dpto no puede asignar rol super_admin");
       }
-      updates.role = body.role;
+      updates.role = requestedRole;
     }
     if (body.unidadId !== undefined) updates.unidadId = normalizeWhitespace(String(body.unidadId || "")) || null;
     if (body.unidadNombre !== undefined) updates.unidadNombre = body.unidadNombre ? toTitleCaseEs(String(body.unidadNombre)) : null;
@@ -207,6 +222,10 @@ export async function PATCH(request: NextRequest) {
     }
     if (body.nombres !== undefined) updates.nombres = toTitleCaseEs(String(body.nombres || ""));
     if (body.apellidos !== undefined) updates.apellidos = toTitleCaseEs(String(body.apellidos || ""));
+
+    if (actor.role === "admin_dpto" && body.status !== undefined) {
+      return forbidden("admin_dpto no puede cambiar el estado de usuarios");
+    }
 
     const nextStatus = body.status ? normalizeStatus(body.status) : normalizeStatus(before?.status);
     updates.status = nextStatus;
@@ -272,7 +291,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
-    if (actor.role !== "super_admin") {
+    if (!canDeactivateUsers(actor.role)) {
       return forbidden("Solo super_admin puede dar de baja usuarios");
     }
 
