@@ -10,11 +10,9 @@ service cloud.firestore {
     function role() { return userDoc().data.role; }
     function unidad() { return userDoc().data.unidadId; }
 
-    function isSuper() { return role() == 'super_admin'; }
     function isDpto() { return role() in ['admin_dpto', 'super_admin']; }
     function isDptoReader() { return role() in ['visor_dpto', 'admin_dpto', 'super_admin']; }
     function isUnidadScope() { return role() in ['operador_unidad', 'admin_unidad']; }
-    function canWriteFaltas() { return role() in ['admin_unidad', 'admin_dpto', 'super_admin']; }
     function canReadUnidad(unidadId) {
       return isDptoReader() || (isUnidadScope() && unidadId == unidad());
     }
@@ -23,27 +21,33 @@ service cloud.firestore {
       return isUnidadScope() && resourceUnidadId == unidad();
     }
 
+    function canReadTransfer(data) {
+      return isDpto() || (
+        isUnidadScope() && (
+          data.fromUnidadId == unidad() ||
+          data.toUnidadId == unidad()
+        )
+      );
+    }
+
     match /users/{uid} {
       allow read: if isSignedIn() && (uid == request.auth.uid || isDpto());
-      allow write: if isSignedIn() && isSuper();
+      allow write: if false;
     }
 
     match /personal/{id} {
       allow read: if isSignedIn() && canReadUnidad(resource.data.unidadId);
-      allow create, update, delete: if isSignedIn() && isDpto();
+      allow write: if false;
     }
 
     match /faltas/{id} {
       allow read: if isSignedIn() && canReadUnidad(resource.data.unidadId);
-      allow create, update: if isSignedIn() && canWriteFaltas() && (isDpto() || sameUnidad(request.resource.data.unidadId));
-      allow delete: if isSignedIn() && isDpto();
+      allow write: if false;
     }
 
     match /solicitudes_eliminacion_falta/{id} {
       allow read: if isSignedIn() && (isDpto() || sameUnidad(resource.data.solicitanteUnidadId));
-      allow create: if isSignedIn() && (isDpto() || sameUnidad(request.resource.data.solicitanteUnidadId));
-      allow update: if isSignedIn() && isDpto();
-      allow delete: if false;
+      allow write: if false;
     }
 
     match /audit_logs/{id} {
@@ -52,8 +56,18 @@ service cloud.firestore {
     }
 
     match /imports_personal/{id} {
-      allow read, create: if isSignedIn() && isDpto();
-      allow update, delete: if isSignedIn() && isSuper();
+      allow read: if isSignedIn() && isDpto();
+      allow write: if false;
+    }
+
+    match /imports_sanciones/{id} {
+      allow read: if isSignedIn() && role() == 'super_admin';
+      allow write: if false;
+
+      match /rows/{rowId} {
+        allow read: if isSignedIn() && role() == 'super_admin';
+        allow write: if false;
+      }
     }
 
     match /transferencias_logs/{id} {
@@ -61,14 +75,29 @@ service cloud.firestore {
       allow write: if false; // Only written via Admin SDK
     }
 
+    match /transferencias_solicitudes/{id} {
+      allow read: if isSignedIn() && canReadTransfer(resource.data);
+      allow write: if false;
+    }
+
     match /reincidencias_bloqueadas/{id} {
-      allow read: if isSignedIn() && (isDpto() || sameUnidad(resource.data.unidadIntentoId));
+      allow read: if isSignedIn() && (isDptoReader() || sameUnidad(resource.data.unidadIntentoId));
       allow write: if false; // Only written via Admin SDK
     }
 
     match /unidades/{id} {
       allow read: if isSignedIn() && (isDptoReader() || (isUnidadScope() && resource.data.id == unidad()));
-      allow create, update, delete: if isSignedIn() && isDpto();
+      allow write: if false;
+    }
+
+    match /ci_registry/{id} {
+      allow read: if isSignedIn() && isDpto();
+      allow write: if false;
+    }
+
+    match /integraciones_sanciones/{id} {
+      allow read: if isSignedIn() && isDpto();
+      allow write: if false;
     }
   }
 }

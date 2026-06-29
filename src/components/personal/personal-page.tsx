@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState, Skeleton, Badge } from "@/components/ui/primitives";
@@ -84,21 +84,29 @@ export function PersonalPage() {
   const sessionUnitId = sessionUser?.unidadId ?? "";
   const effectiveUnitId = isUnitScoped ? (sessionUser?.unidadId ?? "") : selectedUnitId;
 
-  const fetchPersonal = useCallback(async (options?: { force?: boolean }) => {
-    if (!effectiveUnitId) {
+  const fetchPersonal = useCallback(async (options?: { force?: boolean; query?: string }) => {
+    const queryText = options?.query?.trim() ?? "";
+    const canSearchGlobally = canReadGlobal && !effectiveUnitId;
+
+    if (!effectiveUnitId && (!canSearchGlobally || queryText.length < 2)) {
       setRows([]);
+      setPersonalUpdatedAt(null);
       return;
     }
 
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set("unidadId", effectiveUnitId);
-      params.set("limit", "300");
+      if (effectiveUnitId) params.set("unidadId", effectiveUnitId);
+      if (queryText) params.set("q", queryText);
+      params.set("limit", effectiveUnitId && !queryText ? "300" : "50");
+
+      const cacheScope = effectiveUnitId ? `unidad:${effectiveUnitId}` : "global";
+      const cacheQuery = queryText ? queryText.toLowerCase() : "all";
       const payload = await fetchWithCache(
-        `personal:unidad:${effectiveUnitId}`,
+        `personal:${cacheScope}:${cacheQuery}`,
         () => get<{ data: PersonalRow[] }>(`/api/personal?${params.toString()}`),
-        { ttlMs: 5 * 60 * 1000, force: options?.force },
+        { ttlMs: queryText ? 2 * 60 * 1000 : 5 * 60 * 1000, force: options?.force },
       );
       setRows(payload.data.data);
       setPersonalUpdatedAt(payload.storedAt);
@@ -108,7 +116,7 @@ export function PersonalPage() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveUnitId, fetchWithCache, get, toastError]);
+  }, [canReadGlobal, effectiveUnitId, fetchWithCache, get, toastError]);
 
   const fetchRequests = useCallback(async (options?: { force?: boolean }) => {
     if (!canTransfer) {
@@ -151,6 +159,17 @@ export function PersonalPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchRequests();
   }, [fetchRequests]);
+  function handlePersonalSearch(event: FormEvent) {
+    event.preventDefault();
+    const queryText = search.trim();
+
+    if (!effectiveUnitId && canReadGlobal && queryText.length < 2) {
+      toastWarning("Ingrese al menos 2 caracteres para buscar en todo el personal");
+      return;
+    }
+
+    void fetchPersonal({ force: true, query: queryText });
+  }
 
   const orderedRows = useMemo(() => {
     const filter = search.trim().toLowerCase();
@@ -184,7 +203,10 @@ export function PersonalPage() {
   }, [effectiveUnitId, selectedPersonal, unitOptions]);
 
   const pendingIncomingCount = requests.filter((row) => row.estado === "pendiente" && row.toUnidadId === sessionUser?.unidadId).length;
-  const showUnitSelectorPrompt = !isUnitScoped && !effectiveUnitId;
+  const globalSearchText = search.trim();
+  const canUseGlobalPersonalSearch = !isUnitScoped && canReadGlobal;
+  const showUnitSelectorPrompt = canUseGlobalPersonalSearch && !effectiveUnitId && !globalSearchText;
+  const showUnidadActualColumn = canUseGlobalPersonalSearch;
   const selectedFullName = selectedPersonal?.nombreCompleto ?? `${selectedPersonal?.grado ?? ""} ${selectedPersonal?.nombres ?? ""} ${selectedPersonal?.apellidos ?? ""}`.trim();
 
   function openSendModal() {
@@ -279,11 +301,11 @@ export function PersonalPage() {
               </p>
             )}
             <p className="text-sm text-[var(--navy-500)]">
-              Listado de personal por unidad. Ordenado por jerarquía de grado.
+              Listado por unidad o búsqueda individual por CI, nombre o apellido.
             </p>
           </div>
-          {effectiveUnitId && (
-            <Button variant="outline" size="sm" onClick={() => { void fetchPersonal({ force: true }); }} loading={loading}>
+          {(effectiveUnitId || (canUseGlobalPersonalSearch && globalSearchText.length >= 2)) && (
+            <Button variant="outline" size="sm" onClick={() => { void fetchPersonal({ force: true, query: effectiveUnitId ? "" : globalSearchText }); }} loading={loading}>
               Actualizar
             </Button>
           )}
@@ -300,24 +322,33 @@ export function PersonalPage() {
           )}
         </div>
 
-        <div className="mt-4">
+        <form className="mt-4 flex flex-col gap-2 md:flex-row" onSubmit={handlePersonalSearch}>
           <Input
-            placeholder="Buscar por CI, apellidos, nombres o grado"
+            placeholder={canUseGlobalPersonalSearch && !effectiveUnitId ? "Buscar efectivo por CI, nombres o apellidos en todo el comando" : "Buscar por CI, apellidos, nombres o grado"}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="flex-1"
           />
-        </div>
+          <Button type="submit" variant="secondary" loading={loading}>
+            Buscar
+          </Button>
+        </form>
 
         <div className="mt-4">
           {showUnitSelectorPrompt ? (
             <EmptyState
-              title="Seleccione una unidad"
-              description="Para mayor control, primero seleccione una unidad específica para ver su personal."
+              title="Seleccione una unidad o busque un efectivo"
+              description="Puede listar una unidad completa o buscar individualmente por CI, nombre o apellido en todo el comando."
+            />
+          ) : !effectiveUnitId && canUseGlobalPersonalSearch && globalSearchText.length < 2 ? (
+            <EmptyState
+              title="Búsqueda global"
+              description="Ingrese al menos 2 caracteres para buscar un efectivo en todo el personal del comando."
             />
           ) : loading ? (
             <div className="space-y-2">{[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-11 rounded-xl" />)}</div>
           ) : orderedRows.length === 0 ? (
-            <EmptyState title="Sin resultados" description="No hay personal cargado para esta unidad o no coincide la búsqueda." />
+            <EmptyState title="Sin resultados" description={effectiveUnitId ? "No hay personal cargado para esta unidad o no coincide la búsqueda." : "No se encontró personal con ese criterio en el comando."} />
           ) : (
             <div className="overflow-auto rounded-xl border border-[var(--border)]">
               <table className="min-w-full text-sm">
@@ -328,6 +359,9 @@ export function PersonalPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Apellidos</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Nombres</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">CI</th>
+                                      {showUnidadActualColumn && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Unidad actual</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
@@ -342,6 +376,9 @@ export function PersonalPage() {
                       <td className="px-4 py-3 text-[var(--navy-700)]">{row.apellidos}</td>
                       <td className="px-4 py-3 text-[var(--navy-700)]">{row.nombres}</td>
                       <td className="px-4 py-3 text-[var(--navy-900)] font-semibold">{row.ci}</td>
+                                          {showUnidadActualColumn && (
+                        <td className="px-4 py-3 text-[var(--navy-700)] min-w-[220px]">{row.unidadNombre}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

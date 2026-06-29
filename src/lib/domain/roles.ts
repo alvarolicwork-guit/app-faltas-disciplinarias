@@ -26,6 +26,18 @@ export function canRegisterFalta(role: string): boolean {
   return role === "admin_unidad" || role === "admin_dpto" || role === "super_admin";
 }
 
+export function canRegisterHistoricalFalta(role: string): boolean {
+  return role === "admin_dpto" || role === "super_admin";
+}
+
+export function canBulkImportPersonal(role: string): boolean {
+  return role === "super_admin";
+}
+
+export function canBulkImportHistoricalSanctions(role: string): boolean {
+  return role === "super_admin";
+}
+
 export function canViewUsers(role: string): boolean {
   return role === "admin_dpto" || role === "super_admin";
 }

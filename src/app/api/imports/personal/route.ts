@@ -2,6 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
+import { canBulkImportPersonal } from "@/lib/domain/roles";
 import { resolveRangoPolicial } from "@/lib/domain/rangos-policiales";
 import { ciKey, normalizeCi, normalizePersonName, toTitleCaseEs } from "@/lib/domain/text-normalization";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -44,8 +45,12 @@ export async function POST(request: NextRequest) {
     const actor = await getRequestUser(request);
     if (!actor) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-    const canWrite = actor.role === "admin_dpto" || actor.role === "super_admin";
-    if (!canWrite) return NextResponse.json({ error: "Permisos insuficientes" }, { status: 403 });
+    if (!canBulkImportPersonal(actor.role)) {
+      return NextResponse.json(
+        { error: "Solo super_admin puede importar personal por CSV/Excel" },
+        { status: 403 },
+      );
+    }
 
     const body = await request.json();
     const { unidadId, rows } = body;
@@ -167,7 +172,7 @@ export async function POST(request: NextRequest) {
 
       const nombres = normalizePersonName(String(row.nombres ?? ""));
       const apellidos = normalizePersonName(String(row.apellidos ?? ""));
-      const fullName = toTitleCaseEs(`${grado} ${nombres} ${apellidos}`);
+      const fullName = `${grado} ${nombres} ${apellidos}`.trim();
       const existing = existingByCi.get(ci);
       const ref = existing
         ? db.collection("personal").doc(existing.id)

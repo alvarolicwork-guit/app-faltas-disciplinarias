@@ -7,13 +7,21 @@ import {
   USER_ROLES_GLOBAL,
   USER_ROLES_UNIT_SCOPE,
 } from "@/lib/domain/constants";
-import { canViewGlobalPersonHistory } from "@/lib/domain/roles";
+import { canRegisterHistoricalFalta, canViewGlobalPersonHistory } from "@/lib/domain/roles";
 import {
+  articleNumber,
   canEscalateFromArticulo,
-  getArticuloBaseForSancionEscalada,
+  getArticulosBaseForSancionEscalada,
   getSancionSugeridaForFaltaBase,
+  getTerminalSancionArt12,
+  incisoNumber,
+  isDirectReincidenciaControlSubject,
+  isRegimenDisciplinarioReferral,
   isReincidenciaEscalada,
+  isReincidenciaOrigenMatch,
+  isSameTipificacion,
   sameArticulo,
+  type SancionSugerida,
 } from "@/lib/domain/disciplinary-recidivism";
 import {
   createFaltaSchema,
@@ -52,6 +60,54 @@ function timestampToIsoDate(value: unknown): string | null {
   return null;
 }
 
+function buildReferenciaFromFalta(faltaId: string, falta: DocumentData) {
+  return {
+    faltaId,
+    fechaSancion: timestampToIsoDate(falta.fechaSancion),
+    memorandum: falta.memorandum,
+    unidadNombre: falta.unidadSancionNombre ?? falta.unidadNombre,
+  };
+}
+
+function buildBlockedResponsePayload(params: {
+  faltaReferenciaId: string;
+  faltaReferencia: DocumentData;
+  articuloBase: string;
+  incisoBase: string;
+  sancionSugerida: SancionSugerida | null;
+  motivoCadena?: string;
+}) {
+  const referencia = buildReferenciaFromFalta(params.faltaReferenciaId, params.faltaReferencia);
+  return {
+    sancionSugerida: params.sancionSugerida,
+    reincidenciaOrigen: {
+      articuloBase: params.articuloBase,
+      incisoBase: params.incisoBase,
+      faltaReferenciaId: params.faltaReferenciaId,
+      fechaSancionReferencia: referencia.fechaSancion,
+      memorandumReferencia: referencia.memorandum,
+      unidadReferenciaNombre: referencia.unidadNombre,
+      origenReincidenciaPrevia: params.faltaReferencia.reincidenciaOrigen ?? null,
+    },
+    referencia,
+    motivoCadena: params.motivoCadena ?? null,
+    requiereRemisionDisciplinaria: params.sancionSugerida?.requiereRemisionDisciplinaria ?? false,
+    remisionMensaje: params.sancionSugerida?.remisionMensaje ?? null,
+  };
+}
+
+function serializeReincidenciaOrigen(value: unknown): unknown {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  return {
+    ...item,
+    fechaSancionReferencia: timestampToIsoDate(item.fechaSancionReferencia) ?? item.fechaSancionReferencia ?? null,
+    origenReincidenciaPrevia: item.origenReincidenciaPrevia
+      ? serializeReincidenciaOrigen(item.origenReincidenciaPrevia)
+      : null,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
@@ -80,8 +136,12 @@ export async function POST(request: NextRequest) {
       return badRequest("personalId y unidadId son requeridos");
     }
 
-    if (isHistoricalRegistration && actor.role !== "super_admin") {
-      return forbidden("Solo super_admin puede registrar sanciones historicas");
+    if (isRegimenDisciplinarioReferral(input.articulo, input.inciso)) {
+      return forbidden("Art. 12 inc. 1 corresponde a remision a Regimen Disciplinario y no puede registrarse como falta en esta app");
+    }
+
+    if (isHistoricalRegistration && !canRegisterHistoricalFalta(actor.role)) {
+      return forbidden("Solo admin_dpto o super_admin pueden registrar sanciones historicas");
     }
 
     if (userIsUnitScoped && actor.unidadId !== input.unidadId) {
@@ -169,8 +229,8 @@ export async function POST(request: NextRequest) {
           throw new Error("REINCIDENCIA_ORIGIN_REQUIRED");
         }
 
-        const articuloBaseEsperado = getArticuloBaseForSancionEscalada(input.articulo, input.inciso);
-        if (!articuloBaseEsperado || !sameArticulo(input.reincidenciaOrigen.articuloBase, articuloBaseEsperado)) {
+        const articulosBaseEsperados = getArticulosBaseForSancionEscalada(input.articulo, input.inciso);
+        if (!articulosBaseEsperados.some((articuloBase) => sameArticulo(input.reincidenciaOrigen!.articuloBase, articuloBase))) {
           throw new Error("REINCIDENCIA_ORIGIN_ARTICLE_INVALID");
         }
 
@@ -209,10 +269,54 @@ export async function POST(request: NextRequest) {
           fechaSancionReferencia: origen.fechaSancion ?? null,
           memorandumReferencia: origen.memorandum ?? null,
           unidadReferenciaNombre: origen.unidadSancionNombre ?? origen.unidadNombre ?? null,
+          origenReincidenciaPrevia: origen.reincidenciaOrigen ?? null,
         };
+
+        const duplicateEscaladaQuery = adminDb
+          .collection("faltas")
+          .where("personalId", "==", input.personalId)
+          .where("estado", "==", "registrada")
+          .where("fechaSancion", ">=", window.start)
+          .where("fechaSancion", "<=", window.end)
+          .orderBy("fechaSancion", "desc")
+          .limit(100);
+
+        const duplicateEscaladaSnap = await tx.get(duplicateEscaladaQuery);
+        const duplicateEscalada = duplicateEscaladaSnap.docs.find((doc) => {
+          const item = doc.data();
+          return (
+            isSameTipificacion(safeString(item.articulo), safeString(item.inciso), input.articulo, input.inciso) &&
+            isReincidenciaOrigenMatch(item.reincidenciaOrigen, safeString(origen.articulo), safeString(origen.inciso))
+          );
+        });
+
+        if (duplicateEscalada) {
+          const previousEscalada = duplicateEscalada.data();
+          const previousEscaladaArticle = articleNumber(safeString(previousEscalada.articulo));
+          const sancionSugerida = previousEscaladaArticle === 12
+            ? getTerminalSancionArt12()
+            : previousEscaladaArticle
+              ? getSancionSugeridaForFaltaBase(safeString(previousEscalada.articulo))
+              : null;
+
+          if (sancionSugerida) {
+            return {
+              blocked: true as const,
+              reincidenciaBloqueadaId: null,
+              ...buildBlockedResponsePayload({
+                faltaReferenciaId: duplicateEscalada.id,
+                faltaReferencia: previousEscalada,
+                articuloBase: safeString(previousEscalada.articulo),
+                incisoBase: safeString(previousEscalada.inciso),
+                sancionSugerida,
+                motivoCadena: "Ya existe una sancion escalada previa para el mismo origen de reincidencia.",
+              }),
+            };
+          }
+        }
       }
 
-      if (!isSancionEscalada && canEscalateFromArticulo(input.articulo)) {
+      if (!isSancionEscalada && canEscalateFromArticulo(input.articulo) && isDirectReincidenciaControlSubject(input.articulo, input.inciso)) {
         const reincidenciaQuery = adminDb
           .collection("faltas")
           .where("personalId", "==", input.personalId)
@@ -228,13 +332,67 @@ export async function POST(request: NextRequest) {
 
         if (!reincidenciaSnap.empty) {
         const previa = reincidenciaSnap.docs[0].data();
-        const sancionSugerida = getSancionSugeridaForFaltaBase(input.articulo);
-        const referencia = {
-          faltaId: reincidenciaSnap.docs[0].id,
-          fechaSancion: timestampToIsoDate(previa.fechaSancion),
-          memorandum: previa.memorandum,
-          unidadNombre: previa.unidadSancionNombre ?? previa.unidadNombre,
+        const previaId = reincidenciaSnap.docs[0].id;
+
+        const escaladasQuery = adminDb
+          .collection("faltas")
+          .where("personalId", "==", input.personalId)
+          .where("estado", "==", "registrada")
+          .where("fechaSancion", ">=", window.start)
+          .where("fechaSancion", "<=", window.end)
+          .orderBy("fechaSancion", "desc")
+          .limit(100);
+        const escaladasSnap = await tx.get(escaladasQuery);
+        const escaladasMismoOrigen = escaladasSnap.docs
+          .map((doc) => ({ id: doc.id, data: doc.data() }))
+          .filter(({ data }) => isReincidenciaOrigenMatch(data.reincidenciaOrigen, input.articulo, input.inciso));
+
+        const existingArt12Escalada = escaladasMismoOrigen.find(({ data }) => articleNumber(safeString(data.articulo)) === 12 && incisoNumber(safeString(data.inciso)) === 1);
+        const existingArt11Escalada = escaladasMismoOrigen.find(({ data }) => articleNumber(safeString(data.articulo)) === 11 && incisoNumber(safeString(data.inciso)) === 1);
+        const existingArt10Escalada = escaladasMismoOrigen.find(({ data }) => articleNumber(safeString(data.articulo)) === 10 && incisoNumber(safeString(data.inciso)) === 1);
+
+        let sancionSugerida = getSancionSugeridaForFaltaBase(input.articulo);
+        let referencia = buildReferenciaFromFalta(previaId, previa);
+        let fechaSancionReferenciaRaw = previa.fechaSancion ?? null;
+        let motivoCadena = "Se identifico una reincidencia directa dentro del periodo de un ano.";
+        let reincidenciaOrigenPropuesta = {
+          articuloBase: input.articulo,
+          incisoBase: input.inciso,
+          faltaReferenciaId: previaId,
         };
+
+        if (existingArt12Escalada) {
+          sancionSugerida = getTerminalSancionArt12();
+          referencia = buildReferenciaFromFalta(existingArt12Escalada.id, existingArt12Escalada.data);
+          fechaSancionReferenciaRaw = existingArt12Escalada.data.fechaSancion ?? null;
+          motivoCadena = "La cadena de reincidencia ya alcanzo el Art. 12 inc. 1 para este mismo origen.";
+          reincidenciaOrigenPropuesta = {
+            articuloBase: safeString(existingArt12Escalada.data.articulo),
+            incisoBase: safeString(existingArt12Escalada.data.inciso),
+            faltaReferenciaId: existingArt12Escalada.id,
+          };
+        } else if (existingArt11Escalada) {
+          sancionSugerida = getSancionSugeridaForFaltaBase(safeString(existingArt11Escalada.data.articulo));
+          referencia = buildReferenciaFromFalta(existingArt11Escalada.id, existingArt11Escalada.data);
+          fechaSancionReferenciaRaw = existingArt11Escalada.data.fechaSancion ?? null;
+          motivoCadena = "Ya existe una reincidencia previa sancionada como Art. 11 inc. 1 para este mismo origen.";
+          reincidenciaOrigenPropuesta = {
+            articuloBase: safeString(existingArt11Escalada.data.articulo),
+            incisoBase: safeString(existingArt11Escalada.data.inciso),
+            faltaReferenciaId: existingArt11Escalada.id,
+          };
+        } else if (existingArt10Escalada) {
+          sancionSugerida = getSancionSugeridaForFaltaBase(safeString(existingArt10Escalada.data.articulo));
+          referencia = buildReferenciaFromFalta(existingArt10Escalada.id, existingArt10Escalada.data);
+          fechaSancionReferenciaRaw = existingArt10Escalada.data.fechaSancion ?? null;
+          motivoCadena = "Ya existe una reincidencia previa sancionada como Art. 10 inc. 1 para este mismo origen.";
+          reincidenciaOrigenPropuesta = {
+            articuloBase: safeString(existingArt10Escalada.data.articulo),
+            incisoBase: safeString(existingArt10Escalada.data.inciso),
+            faltaReferenciaId: existingArt10Escalada.id,
+          };
+        }
+
         const now = Timestamp.now();
         const blockedPayload = {
           personalId: input.personalId,
@@ -250,16 +408,15 @@ export async function POST(request: NextRequest) {
           fechaSancionIntentada: fechaSancionTs,
           memorandumIntentado: input.memorandum,
           motivoIntentado: input.motivo,
-          faltaReferenciaId: referencia.faltaId,
-          fechaSancionReferencia: previa.fechaSancion ?? null,
-          memorandumReferencia: previa.memorandum ?? null,
+          faltaReferenciaId: reincidenciaOrigenPropuesta.faltaReferenciaId,
+          fechaSancionReferencia: fechaSancionReferenciaRaw,
+          memorandumReferencia: referencia.memorandum ?? null,
           unidadReferenciaNombre: referencia.unidadNombre ?? null,
           sancionSugerida,
-          reincidenciaOrigenPropuesta: {
-            articuloBase: input.articulo,
-            incisoBase: input.inciso,
-            faltaReferenciaId: referencia.faltaId,
-          },
+          reincidenciaOrigenPropuesta,
+          requiereRemisionDisciplinaria: sancionSugerida?.requiereRemisionDisciplinaria ?? false,
+          remisionMensaje: sancionSugerida?.remisionMensaje ?? null,
+          motivoCadena,
           actor: {
             uid: actor.uid,
             email: actor.email,
@@ -289,14 +446,15 @@ export async function POST(request: NextRequest) {
           reincidenciaBloqueadaId: reincidenciaBloqueadaRef.id,
           sancionSugerida,
           reincidenciaOrigen: {
-            articuloBase: input.articulo,
-            incisoBase: input.inciso,
-            faltaReferenciaId: referencia.faltaId,
+            ...reincidenciaOrigenPropuesta,
             fechaSancionReferencia: referencia.fechaSancion,
             memorandumReferencia: referencia.memorandum,
             unidadReferenciaNombre: referencia.unidadNombre,
           },
           referencia,
+          motivoCadena,
+          requiereRemisionDisciplinaria: sancionSugerida?.requiereRemisionDisciplinaria ?? false,
+          remisionMensaje: sancionSugerida?.remisionMensaje ?? null,
         };
       }
       }
@@ -325,6 +483,10 @@ export async function POST(request: NextRequest) {
         reincidencia: isSancionEscalada,
         reincidenciaReferencia: reincidenciaOrigen,
         reincidenciaOrigen,
+        requiereRemisionDisciplinaria: articleNumber(input.articulo) === 12 && incisoNumber(input.inciso) === 1,
+        remisionMensaje: articleNumber(input.articulo) === 12 && incisoNumber(input.inciso) === 1
+          ? "Corresponde remitir todos los actuados a Régimen Disciplinario del Comando Departamental de Policía."
+          : null,
         estado: "registrada",
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -372,6 +534,9 @@ export async function POST(request: NextRequest) {
           sancionSugerida: result.sancionSugerida,
           reincidenciaOrigen: result.reincidenciaOrigen,
           referencia: result.referencia,
+          motivoCadena: result.motivoCadena,
+          requiereRemisionDisciplinaria: result.requiereRemisionDisciplinaria,
+          remisionMensaje: result.remisionMensaje,
         },
         { status: 409 },
       );
@@ -549,14 +714,7 @@ export async function GET(request: NextRequest) {
           id: doc.id,
         ...item,
         unidadSancionNombre: item.unidadSancionNombre ?? item.unidadNombre ?? null,
-        reincidenciaOrigen: item.reincidenciaOrigen
-          ? {
-              ...item.reincidenciaOrigen,
-              fechaSancionReferencia: item.reincidenciaOrigen.fechaSancionReferencia?.toDate?.()?.toISOString?.()?.slice(0, 10)
-                ?? item.reincidenciaOrigen.fechaSancionReferencia
-                ?? null,
-            }
-          : null,
+        reincidenciaOrigen: serializeReincidenciaOrigen(item.reincidenciaOrigen),
         fechaSancion: item.fechaSancion?.toDate?.()?.toISOString()?.slice(0, 10) ?? null,
         createdAt: item.createdAt?.toDate?.()?.toISOString?.() ?? null,
         updatedAt: item.updatedAt?.toDate?.()?.toISOString?.() ?? null,

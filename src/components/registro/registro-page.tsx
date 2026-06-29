@@ -7,6 +7,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import { ImportarSancionesHistoricas } from "@/components/registro/importar-sanciones-historicas";
 import { useApi, ApiError } from "@/hooks/use-api";
 import { useAuth, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
 import { useDataCache } from "@/hooks/use-data-cache";
@@ -14,10 +15,22 @@ import { useUnidades } from "@/hooks/use-unidades";
 import { useToast } from "@/hooks/use-toast";
 import { DISCIPLINARY_CATALOG, type DisciplinaryArticle } from "@/lib/domain/disciplinary-catalog";
 import {
-  getArticuloBaseForSancionEscalada,
+  canBulkImportHistoricalSanctions,
+  canRegisterHistoricalFalta,
+} from "@/lib/domain/roles";
+import {
+  getArticulosBaseForSancionEscalada,
+  isRegimenDisciplinarioReferral,
   isReincidenciaEscalada,
   sameArticulo,
 } from "@/lib/domain/disciplinary-recidivism";
+import { formatFaltaOrigenOption, type ReincidenciaOrigenView } from "@/lib/domain/reincidencia-format";
+import {
+  extractSanctionDocumentNumber,
+  formatSanctionDocumentNumber,
+  getSanctionDocumentPrefix,
+  isValidSanctionDocumentNumber,
+} from "@/lib/domain/sanction-document";
 
 type Personal = {
   id: string;
@@ -38,12 +51,26 @@ type FaltaOrigen = {
   memorandum: string;
   unidadSancionNombre?: string;
   unidadNombre?: string;
+  reincidenciaOrigen?: ReincidenciaOrigenView;
 };
 
 type ReincidenciaOrigenState = {
   articuloBase: string;
   incisoBase: string;
   faltaReferenciaId: string;
+} | null;
+
+type ReincidenciaNotice = {
+  suggestedArticle: string;
+  suggestedInciso: string;
+  originArticle: string;
+  originInciso: string;
+  memo?: string;
+  date?: string;
+  unit?: string;
+  motivoCadena?: string | null;
+  remisionMensaje?: string | null;
+  requiresReferral?: boolean;
 } | null;
 
 export function RegistroPage() {
@@ -66,6 +93,7 @@ export function RegistroPage() {
   const [origenRows, setOrigenRows] = useState<FaltaOrigen[]>([]);
   const [origenLoading, setOrigenLoading] = useState(false);
   const [reincidenciaOrigen, setReincidenciaOrigen] = useState<ReincidenciaOrigenState>(null);
+  const [reincidenciaNotice, setReincidenciaNotice] = useState<ReincidenciaNotice>(null);
 
   const [form, setForm] = useState({
     articuloId: "",
@@ -77,15 +105,20 @@ export function RegistroPage() {
 
   const canSelectUnit = sessionUser ? !isUnitScopedRole(sessionUser.role) : false;
   const isGlobalActor = sessionUser ? isGlobalRole(sessionUser.role) : false;
-  const isSuperAdmin = sessionUser?.role === "super_admin";
-  const isHistoricalMode = isSuperAdmin && registroMode === "historico";
+  const canUseHistoricalMode = sessionUser ? canRegisterHistoricalFalta(sessionUser.role) : false;
+  const canUseBulkHistoricalImport = sessionUser
+    ? canBulkImportHistoricalSanctions(sessionUser.role)
+    : false;
+  const isHistoricalMode = canUseHistoricalMode && registroMode === "historico";
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
   const personalSearchUnitId = isHistoricalMode ? "" : effectiveUnitId;
 
   const selectedPersonal = useMemo(() => personalRows.find((r) => r.id === selectedPersonalId) ?? null, [personalRows, selectedPersonalId]);
   const selectedArticle = useMemo(() => DISCIPLINARY_CATALOG.find((a) => a.id === form.articuloId) ?? null, [form.articuloId]);
+  const sanctionDocumentPrefix = selectedArticle ? getSanctionDocumentPrefix(selectedArticle.id) : getSanctionDocumentPrefix("");
   const isSancionEscalada = selectedArticle ? isReincidenciaEscalada(selectedArticle.label, form.inciso) : false;
-  const articuloBaseEsperado = selectedArticle ? getArticuloBaseForSancionEscalada(selectedArticle.label, form.inciso) : null;
+  const requiresDisciplinaryReferral = selectedArticle ? isRegimenDisciplinarioReferral(selectedArticle.label, form.inciso) : false;
+  const articulosBaseEsperados = selectedArticle ? getArticulosBaseForSancionEscalada(selectedArticle.label, form.inciso) : [];
   const sanctionUnitOptions = useMemo(
     () => [{ value: "", label: "Todas las unidades" }, ...unitOptions],
     [unitOptions],
@@ -140,6 +173,7 @@ export function RegistroPage() {
     setTransferTargetUnitId("");
     setOrigenRows([]);
     setReincidenciaOrigen(null);
+    setReincidenciaNotice(null);
   }
 
   function handleRegistroModeChange(mode: "actual" | "historico") {
@@ -152,6 +186,7 @@ export function RegistroPage() {
     setTransferTargetUnitId("");
     setOrigenRows([]);
     setReincidenciaOrigen(null);
+    setReincidenciaNotice(null);
   }
 
   function getArticleIdByLabel(label: string): DisciplinaryArticle["id"] | "" {
@@ -159,23 +194,42 @@ export function RegistroPage() {
   }
 
   function handleArticleChange(articleId: string) {
-    setForm((prev) => ({ ...prev, articuloId: articleId, inciso: "" }));
+    setForm((prev) => ({
+      ...prev,
+      articuloId: articleId,
+      inciso: "",
+      memorandum: articleId ? formatSanctionDocumentNumber(articleId, prev.memorandum) : "",
+    }));
     setOrigenRows([]);
     setReincidenciaOrigen(null);
+    setReincidenciaNotice(null);
+  }
+
+  function handleMemorandumChange(value: string) {
+    if (!selectedArticle) {
+      setForm((prev) => ({ ...prev, memorandum: extractSanctionDocumentNumber(value) }));
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      memorandum: formatSanctionDocumentNumber(selectedArticle.id, value),
+    }));
   }
 
   function handleIncisoChange(inciso: string) {
     setForm((prev) => ({ ...prev, inciso }));
     setOrigenRows([]);
     setReincidenciaOrigen(null);
+    setReincidenciaNotice(null);
 
     if (selectedArticle && selectedPersonal && isReincidenciaEscalada(selectedArticle.label, inciso)) {
-      const base = getArticuloBaseForSancionEscalada(selectedArticle.label, inciso);
-      if (base) void refreshOrigenRows(selectedPersonal.id, base);
+      const bases = getArticulosBaseForSancionEscalada(selectedArticle.label, inciso);
+      if (bases.length > 0) void refreshOrigenRows(selectedPersonal.id, bases);
     }
   }
 
-  function selectOrigen(origenId: string) {
+function selectOrigen(origenId: string) {
     const row = origenRows.find((item) => item.id === origenId);
     if (!row) {
       setReincidenciaOrigen(null);
@@ -189,8 +243,8 @@ export function RegistroPage() {
     });
   }
 
-  const refreshOrigenRows = useCallback(async (personalId: string, articuloBase: string) => {
-    if (!personalId || !articuloBase) {
+  const refreshOrigenRows = useCallback(async (personalId: string, articulosBase: string[]) => {
+    if (!personalId || articulosBase.length === 0) {
       setOrigenRows([]);
       return;
     }
@@ -201,7 +255,7 @@ export function RegistroPage() {
       params.set("personalId", personalId);
       params.set("estado", "registrada");
       const payload = await get<{ data: FaltaOrigen[] }>(`/api/faltas?${params}`);
-      setOrigenRows(payload.data.filter((row) => sameArticulo(row.articulo, articuloBase)));
+      setOrigenRows(payload.data.filter((row) => articulosBase.some((articuloBase) => sameArticulo(row.articulo, articuloBase))));
     } catch {
       setOrigenRows([]);
     } finally {
@@ -212,6 +266,13 @@ export function RegistroPage() {
   function handlePreSubmit(e: FormEvent) {
     e.preventDefault();
     if (!selectedPersonal) { toast.warning("Seleccione un efectivo"); return; }
+    if (requiresDisciplinaryReferral) {
+      toast.warning(
+        "Remision a Regimen Disciplinario",
+        "Art. 12 inc. 1 no se registra como falta en esta app. Remita los actuados a Regimen Disciplinario.",
+      );
+      return;
+    }
     if (!effectiveUnitId) { toast.warning(isHistoricalMode ? "Seleccione la unidad que impuso la sanción" : "Seleccione la unidad que impone la sanción"); return; }
     if (isHistoricalMode && !historicalDutyUnitId) { toast.warning("Seleccione la unidad donde prestaba funciones al momento de la sanción"); return; }
     if (!selectedArticle || !form.inciso) { toast.warning("Seleccione artículo e inciso"); return; }
@@ -219,7 +280,10 @@ export function RegistroPage() {
       toast.warning("Seleccione la falta del artículo anterior que origina la reincidencia");
       return;
     }
-    if (!form.memorandum.trim()) { toast.warning("Ingrese el número de memorándum"); return; }
+    if (!form.memorandum.trim() || !selectedArticle || !isValidSanctionDocumentNumber(selectedArticle.id, form.memorandum)) {
+      toast.warning("Ingrese el número de memorándum/Acta", `Formato esperado: ${sanctionDocumentPrefix}001/2026`);
+      return;
+    }
     if (!form.motivo.trim()) { toast.warning("Ingrese el motivo disciplinario"); return; }
     setConfirmOpen(true);
   }
@@ -248,11 +312,15 @@ export function RegistroPage() {
       setSelectedPersonalId("");
       setOrigenRows([]);
       setReincidenciaOrigen(null);
+      setReincidenciaNotice(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         const payload = err.payload as {
           referencia?: { memorandum?: string; fechaSancion?: string; unidadNombre?: string };
           sancionSugerida?: { articulo: string; inciso: string };
+          requiereRemisionDisciplinaria?: boolean;
+          remisionMensaje?: string | null;
+          motivoCadena?: string | null;
           reincidenciaOrigen?: {
             articuloBase: string;
             incisoBase: string;
@@ -280,10 +348,26 @@ export function RegistroPage() {
             incisoBase: payload.reincidenciaOrigen.incisoBase,
             faltaReferenciaId: payload.reincidenciaOrigen.faltaReferenciaId,
           });
+          setReincidenciaNotice({
+            suggestedArticle: payload.sancionSugerida.articulo,
+            suggestedInciso: payload.sancionSugerida.inciso,
+            originArticle: payload.reincidenciaOrigen.articuloBase,
+            originInciso: payload.reincidenciaOrigen.incisoBase,
+            memo: ref?.memorandum,
+            date: ref?.fechaSancion?.slice(0, 10),
+            unit: ref?.unidadNombre,
+            motivoCadena: payload.motivoCadena,
+            remisionMensaje: payload.remisionMensaje,
+            requiresReferral: payload.requiereRemisionDisciplinaria,
+          });
         }
+        const remision = payload.requiereRemisionDisciplinaria
+          ? ` ${payload.remisionMensaje ?? "Corresponde remitir actuados a Régimen Disciplinario."}`
+          : "";
+        const detalleCadena = payload.motivoCadena ? `${payload.motivoCadena} ` : "";
         toast.error(
           "Reincidencia detectada",
-          `Debe registrar la sanción superior ${payload.sancionSugerida?.articulo?.split(" - ")[0] ?? "correspondiente"} inciso 1. Memo previo: ${ref?.memorandum ?? "N/A"} (${ref?.fechaSancion?.slice(0, 10) ?? "N/A"}).`,
+          `${detalleCadena}Debe registrar la sancion superior ${payload.sancionSugerida?.articulo?.split(" - ")[0] ?? "correspondiente"} inciso 1. Memo previo: ${ref?.memorandum ?? "N/A"} (${ref?.fechaSancion?.slice(0, 10) ?? "N/A"}).${remision}`,
         );
       } else {
         toast.error("Error", err instanceof Error ? err.message : "No se pudo registrar");
@@ -358,7 +442,7 @@ export function RegistroPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      {isSuperAdmin && (
+      {canUseHistoricalMode && (
         <Card className="p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -385,6 +469,8 @@ export function RegistroPage() {
           </div>
         </Card>
       )}
+
+      {canUseBulkHistoricalImport && <ImportarSancionesHistoricas />}
 
       {/* Unit selector */}
       <Card className="p-5">
@@ -449,9 +535,10 @@ export function RegistroPage() {
                 setSelectedPersonalId(row.id);
                 setOrigenRows([]);
                 setReincidenciaOrigen(null);
+                setReincidenciaNotice(null);
                 if (selectedArticle && form.inciso && isReincidenciaEscalada(selectedArticle.label, form.inciso)) {
-                  const base = getArticuloBaseForSancionEscalada(selectedArticle.label, form.inciso);
-                  if (base) void refreshOrigenRows(row.id, base);
+                  const bases = getArticulosBaseForSancionEscalada(selectedArticle.label, form.inciso);
+                  if (bases.length > 0) void refreshOrigenRows(row.id, bases);
                 }
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-[var(--border)] last:border-b-0 transition-colors ${selectedPersonalId === row.id ? "bg-[var(--gold-50)] border-l-2 border-l-[var(--gold-500)]" : "hover:bg-[var(--navy-50)]"}`}
@@ -531,6 +618,45 @@ export function RegistroPage() {
           </div>
         )}
         <form className="space-y-4" onSubmit={handlePreSubmit}>
+          {reincidenciaNotice && (
+            <div className="rounded-xl border border-[var(--warning-100)] bg-[var(--warning-50)] p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--warning-600)]">Reincidencia identificada</p>
+                  <p className="mt-1 text-xs text-[var(--warning-600)]">
+                    {reincidenciaNotice.motivoCadena ?? "Se identifico una reincidencia dentro del periodo de control."}
+                  </p>
+                </div>
+                <Badge variant={reincidenciaNotice.requiresReferral ? "danger" : "gold"}>
+                  {reincidenciaNotice.suggestedArticle.split(" - ")[0]} inc. 1
+                </Badge>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg bg-white/70 p-3 border border-[var(--warning-100)]">
+                  <p className="text-xs text-[var(--navy-400)]">Antecedente usado</p>
+                  <p className="text-sm font-semibold text-[var(--navy-900)]">{reincidenciaNotice.originArticle.split(" - ")[0]}</p>
+                  <p className="mt-1 text-xs text-[var(--navy-600)]">{reincidenciaNotice.originInciso}</p>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-[var(--warning-100)]">
+                  <p className="text-xs text-[var(--navy-400)]">Memorándum/Acta</p>
+                  <p className="text-sm font-semibold text-[var(--navy-900)]">{reincidenciaNotice.memo ?? "N/A"}</p>
+                  <p className="mt-1 text-xs text-[var(--navy-600)]">{reincidenciaNotice.date ?? "N/A"}</p>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-[var(--warning-100)]">
+                  <p className="text-xs text-[var(--navy-400)]">Unidad que sanciono</p>
+                  <p className="text-sm font-semibold text-[var(--navy-900)]">{reincidenciaNotice.unit ?? "N/A"}</p>
+                </div>
+              </div>
+              <p className="mt-3 text-xs font-medium text-[var(--warning-600)]">
+                Se preparo el formulario para registrar la sancion superior sugerida: {reincidenciaNotice.suggestedArticle.split(" - ")[0]} inc. 1.
+              </p>
+              {reincidenciaNotice.requiresReferral && (
+                <p className="mt-2 text-xs font-semibold text-[var(--danger-600)]">
+                  {reincidenciaNotice.remisionMensaje ?? "Corresponde remitir actuados a Régimen Disciplinario."}
+                </p>
+              )}
+            </div>
+          )}
           {isHistoricalMode && (
             <Select
               label="Unidad donde prestaba funciones al momento de la sanción"
@@ -565,7 +691,7 @@ export function RegistroPage() {
               <div>
                 <p className="text-sm font-semibold text-[var(--warning-600)]">Origen obligatorio de reincidencia</p>
                 <p className="text-xs text-[var(--warning-600)] mt-1">
-                  Esta sanción debe referir la falta previa del {articuloBaseEsperado?.split(" - ")[0] ?? "artículo anterior"} que fue reincidida.
+                  Esta sanción debe referir la falta previa de {articulosBaseEsperados.map((articulo) => articulo.split(" - ")[0]).join(" o ") || "artículo anterior"} que fue reincidida.
                 </p>
               </div>
               <Select
@@ -574,7 +700,7 @@ export function RegistroPage() {
                 onChange={(e) => selectOrigen(e.target.value)}
                 options={origenRows.map((row) => ({
                   value: row.id,
-                  label: `${row.fechaSancion ?? ""} | ${row.articulo.split(" - ")[0]} | ${row.inciso} | Memo ${row.memorandum} | Unidad: ${row.unidadSancionNombre ?? row.unidadNombre ?? "N/A"}`,
+                  label: formatFaltaOrigenOption(row),
                 }))}
                 placeholder={origenLoading ? "Cargando faltas previas..." : "Seleccionar falta previa"}
                 disabled={origenLoading || origenRows.length === 0}
@@ -587,6 +713,14 @@ export function RegistroPage() {
               )}
             </div>
           )}
+          {requiresDisciplinaryReferral && (
+            <div className="rounded-xl border border-[var(--danger-100)] bg-[var(--danger-50)] p-4">
+              <p className="text-sm font-semibold text-[var(--danger-600)]">Remisión a Régimen Disciplinario</p>
+              <p className="mt-1 text-xs text-[var(--danger-600)]">
+                Esta reincidencia corresponde a falta grave. Remita todos los actuados a Régimen Disciplinario del Comando Departamental de Policía.
+              </p>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <Input
               label="Fecha de sanción"
@@ -596,10 +730,13 @@ export function RegistroPage() {
               required
             />
             <Input
-              label="Número de memorándum"
-              placeholder="Ej: MEMO-001/2026"
+              label="Número de memorándum/Acta"
+              placeholder={`Ej: ${sanctionDocumentPrefix}001/2026`}
               value={form.memorandum}
-              onChange={(e) => setForm((p) => ({ ...p, memorandum: e.target.value }))}
+              onChange={(e) => handleMemorandumChange(e.target.value)}
+              inputMode="numeric"
+              pattern={`${sanctionDocumentPrefix}\\d{3}/\\d{4}`}
+              disabled={!selectedArticle}
               required
             />
           </div>
@@ -611,8 +748,8 @@ export function RegistroPage() {
             onChange={(e) => setForm((p) => ({ ...p, motivo: e.target.value }))}
             required
           />
-          <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!selectedPersonal || (!!selectedPersonal.transferRequired && !isHistoricalMode)} className="w-full" icon={Icons.check({ size: 18 })}>
-            Registrar Sanción
+          <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!selectedPersonal || requiresDisciplinaryReferral || (!!selectedPersonal.transferRequired && !isHistoricalMode)} className="w-full" icon={Icons.check({ size: 18 })}>
+            {requiresDisciplinaryReferral ? "Remitir a Régimen Disciplinario" : "Registrar Sanción"}
           </Button>
         </form>
       </Card>
@@ -666,7 +803,7 @@ export function RegistroPage() {
                 <p className="text-sm font-semibold text-[var(--navy-900)]">{selectedArticle?.label.split(" - ")[0]}</p>
               </div>
               <div className="p-3 rounded-xl bg-[var(--navy-50)]">
-                <p className="text-xs text-[var(--navy-400)]">Memorándum</p>
+                <p className="text-xs text-[var(--navy-400)]">Memorándum/Acta</p>
                 <p className="text-sm font-semibold text-[var(--navy-900)]">{form.memorandum}</p>
               </div>
             </div>

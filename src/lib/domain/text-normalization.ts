@@ -38,3 +38,7 @@ export function normalizeFreeText(value: string): string {
 export function normalizePersonName(value: string): string {
   return toTitleCaseEs(value);
 }
+
+export function normalizeUnitName(value: string): string {
+  return normalizeWhitespace(value).toLocaleUpperCase("es-BO");
+}

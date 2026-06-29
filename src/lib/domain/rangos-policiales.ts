@@ -1,5 +1,5 @@
 export const RANGOS_POLICIALES = [
-  "Cnl. MSC. CAD.",
+  "Cnl. MSc. CAD.",
   "Tcnl. DEAP.",
   "My.",
   "Cap.",
@@ -13,6 +13,18 @@ export const RANGOS_POLICIALES = [
   "Sgto. 1ro.",
   "Sgto. 2do.",
   "Sgto.",
+  "My. Serv.",
+  "Cap. Serv.",
+  "Tte. Serv.",
+  "Sbtte. Serv.",
+  "Sof. Sup. Serv.",
+  "Sof. My. Serv.",
+  "Sof. 1ro. Serv.",
+  "Sof. 2do. Serv.",
+  "Sgto. My. Serv.",
+  "Sgto. 1ro. Serv.",
+  "Sgto. 2do. Serv.",
+  "Sgto. Serv.",
 ] as const;
 
 type RangoOficial = (typeof RANGOS_POLICIALES)[number];
@@ -20,40 +32,6 @@ type RangoOficial = (typeof RANGOS_POLICIALES)[number];
 const RANGO_ORDER = new Map<string, number>(
   RANGOS_POLICIALES.map((rango, index) => [rango, index + 1]),
 );
-
-const RANGO_ALIAS: Record<string, RangoOficial> = {
-  "cnl msc cad": "Cnl. MSC. CAD.",
-  "cnl. msc. cad.": "Cnl. MSC. CAD.",
-  "tcnl deap": "Tcnl. DEAP.",
-  "tcnl. deap.": "Tcnl. DEAP.",
-  "my": "My.",
-  "my.": "My.",
-  "cap": "Cap.",
-  "cap.": "Cap.",
-  "cap,": "Cap.",
-  "tte": "Tte.",
-  "tte.": "Tte.",
-  "sbtte": "Sbtte.",
-  "sbtte.": "Sbtte.",
-  "sof sup": "Sof. Sup.",
-  "sof. sup.": "Sof. Sup.",
-  "sof my": "Sof. My.",
-  "sof. my.": "Sof. My.",
-  "sof 1ro": "Sof. 1ro.",
-  "sof. 1ro.": "Sof. 1ro.",
-  "sof 2do": "Sof. 2do.",
-  "sof. 2do.": "Sof. 2do.",
-  "sgto my": "Sgto. My.",
-  "sgto. my.": "Sgto. My.",
-  "sgto 1ro": "Sgto. 1ro.",
-  "sgto. 1ro.": "Sgto. 1ro.",
-  "sgto primero": "Sgto. 1ro.",
-  "sgto 2do": "Sgto. 2do.",
-  "sgto. 2do.": "Sgto. 2do.",
-  "sgto segundo": "Sgto. 2do.",
-  "sgto": "Sgto.",
-  "sgto.": "Sgto.",
-};
 
 function compactRango(value: string): string {
   return value
@@ -63,11 +41,73 @@ function compactRango(value: string): string {
     .trim();
 }
 
+const RANGO_ALIAS = new Map<string, RangoOficial>(
+  RANGOS_POLICIALES.map((rango) => [compactRango(rango), rango]),
+);
+
+const EXTRA_ALIASES: Array<[string, RangoOficial]> = [
+  ["cnl msc cad", "Cnl. MSc. CAD."],
+  ["coronel msc cad", "Cnl. MSc. CAD."],
+  ["tcnl deap", "Tcnl. DEAP."],
+  ["teniente coronel deap", "Tcnl. DEAP."],
+  ["my", "My."],
+  ["mayor", "My."],
+  ["cap", "Cap."],
+  ["capitan", "Cap."],
+  ["tte", "Tte."],
+  ["teniente", "Tte."],
+  ["sbtte", "Sbtte."],
+  ["subteniente", "Sbtte."],
+  ["sof sup", "Sof. Sup."],
+  ["suboficial superior", "Sof. Sup."],
+  ["sof my", "Sof. My."],
+  ["suboficial mayor", "Sof. My."],
+  ["sof 1ro", "Sof. 1ro."],
+  ["suboficial primero", "Sof. 1ro."],
+  ["sof 2do", "Sof. 2do."],
+  ["suboficial segundo", "Sof. 2do."],
+  ["sgto my", "Sgto. My."],
+  ["sargento mayor", "Sgto. My."],
+  ["sgto 1ro", "Sgto. 1ro."],
+  ["sgto primero", "Sgto. 1ro."],
+  ["sgto 2do", "Sgto. 2do."],
+  ["sgto segundo", "Sgto. 2do."],
+  ["sgto", "Sgto."],
+  ["sargento", "Sgto."],
+  ["my serv", "My. Serv."],
+  ["mayor serv", "My. Serv."],
+  ["mayor servicios", "My. Serv."],
+  ["cap serv", "Cap. Serv."],
+  ["capitan serv", "Cap. Serv."],
+  ["capitan servicios", "Cap. Serv."],
+  ["tte serv", "Tte. Serv."],
+  ["teniente serv", "Tte. Serv."],
+  ["teniente servicios", "Tte. Serv."],
+  ["sbtte serv", "Sbtte. Serv."],
+  ["subteniente serv", "Sbtte. Serv."],
+  ["subteniente servicios", "Sbtte. Serv."],
+  ["sof sup serv", "Sof. Sup. Serv."],
+  ["suboficial superior servicios", "Sof. Sup. Serv."],
+  ["sof my serv", "Sof. My. Serv."],
+  ["suboficial mayor servicios", "Sof. My. Serv."],
+  ["sof 1ro serv", "Sof. 1ro. Serv."],
+  ["suboficial primero servicios", "Sof. 1ro. Serv."],
+  ["sof 2do serv", "Sof. 2do. Serv."],
+  ["suboficial segundo servicios", "Sof. 2do. Serv."],
+  ["sgto my serv", "Sgto. My. Serv."],
+  ["sargento mayor servicios", "Sgto. My. Serv."],
+  ["sgto 1ro serv", "Sgto. 1ro. Serv."],
+  ["sargento primero servicios", "Sgto. 1ro. Serv."],
+  ["sgto 2do serv", "Sgto. 2do. Serv."],
+  ["sargento segundo servicios", "Sgto. 2do. Serv."],
+  ["sgto serv", "Sgto. Serv."],
+  ["sargento servicios", "Sgto. Serv."],
+];
+
+EXTRA_ALIASES.forEach(([alias, rango]) => RANGO_ALIAS.set(compactRango(alias), rango));
+
 export function normalizeRangoPolicial(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (trimmed === "Cap,") return "Cap.";
-  return trimmed.replace(/\s+/g, " ");
+  return value.trim().replace(/\s+/g, " ");
 }
 
 export function resolveRangoPolicial(rawValue: string): {
@@ -84,16 +124,10 @@ export function resolveRangoPolicial(rawValue: string): {
     return { ok: true, gradoFinal: normalized, metodo: "exact" };
   }
 
-  const alias = RANGO_ALIAS[compactRango(normalized)] ?? RANGO_ALIAS[normalized.toLowerCase()];
+  const compact = compactRango(normalized);
+  const alias = RANGO_ALIAS.get(compact);
   if (alias) {
     return { ok: true, gradoFinal: alias, metodo: "alias" };
-  }
-
-  const compact = compactRango(normalized);
-  for (const official of RANGOS_POLICIALES) {
-    if (compactRango(official) === compact) {
-      return { ok: true, gradoFinal: official, metodo: "normalized" };
-    }
   }
 
   return { ok: false, gradoFinal: normalized, metodo: "invalid" };

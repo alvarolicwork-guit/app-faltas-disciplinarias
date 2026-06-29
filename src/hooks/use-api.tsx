@@ -13,11 +13,12 @@ export function useApi() {
   const apiFetch = useCallback(
     async <T = unknown>(path: string, init?: ApiOptions): Promise<T> => {
       const token = await getToken();
+      const isFormData = init?.body instanceof FormData;
 
       const response = await fetch(path, {
         ...init,
         headers: {
-          "Content-Type": "application/json",
+          ...(!isFormData ? { "Content-Type": "application/json" } : {}),
           Authorization: `Bearer ${token}`,
           ...(init?.headers ?? {}),
         },
@@ -61,7 +62,13 @@ export function useApi() {
     [apiFetch],
   );
 
-  return { apiFetch, get, post, patch, del };
+  const upload = useCallback(
+    <T = unknown>(path: string, body: FormData) =>
+      apiFetch<T>(path, { method: "POST", body }),
+    [apiFetch],
+  );
+
+  return { apiFetch, get, post, patch, del, upload };
 }
 
 /* ─── Custom Error ─── */

@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const unidadId = normalizeWhitespace(String(body?.unidadId ?? ""));
-    const unidadNombre = body?.unidadNombre ? toTitleCaseEs(String(body.unidadNombre)) : null;
+    const unidadNombre = body?.unidadNombre ? normalizeWhitespace(String(body.unidadNombre)) : null;
     const role = String(body?.role ?? "").trim();
     const incomingEmail = String(body?.incomingEmail ?? "").trim().toLowerCase();
     const incomingDisplayName = body?.incomingDisplayName

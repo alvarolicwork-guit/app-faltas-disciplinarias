@@ -10,7 +10,7 @@ import {
 } from "@/lib/domain/constants";
 import { canManageTransfers } from "@/lib/domain/roles";
 import { createPersonalSchema } from "@/lib/domain/schemas";
-import { ciKey, toTitleCaseEs } from "@/lib/domain/text-normalization";
+import { ciKey } from "@/lib/domain/text-normalization";
 import { getAdminDb } from "@/lib/firebase/admin";
 
 function unauthorized() {
@@ -43,13 +43,15 @@ export async function GET(request: NextRequest) {
     const actorIsUnit = USER_ROLES_UNIT_SCOPE.has(actor.role);
     let query: Query = adminDb.collection("personal");
 
-    if (actorIsUnit && !q) {
+    if (actorIsUnit) {
       query = query.where("unidadId", "==", actor.unidadId);
     } else if (unidadIdParam && USER_ROLES_GLOBAL_READ.has(actor.role)) {
       query = query.where("unidadId", "==", unidadIdParam);
+    } else if (!unidadIdParam && !q) {
+      return NextResponse.json({ data: [] }, { status: 200 });
     }
 
-    query = query.limit(q ? Math.max(limit, 300) : Math.max(limit, 300));
+    query = query.limit(q ? 2000 : Math.max(limit, 300));
     const snap = await query.get();
 
     const rows: Array<{ id: string } & Record<string, unknown>> = snap.docs.map(
@@ -150,7 +152,7 @@ export async function POST(request: NextRequest) {
         grado: input.grado,
         nombres: input.nombres,
         apellidos: input.apellidos,
-        nombreCompleto: toTitleCaseEs(fullName),
+        nombreCompleto: fullName,
         sexo: input.sexo,
         unidadId: input.unidadId,
         unidadNombre: input.unidadNombre,

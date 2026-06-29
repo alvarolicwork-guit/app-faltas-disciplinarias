@@ -44,3 +44,7 @@ dev-server*.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local controlled data exports
+/.data-backups/
+.devserver*.log

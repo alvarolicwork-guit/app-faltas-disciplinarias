@@ -11,6 +11,7 @@ import { useAuth, canViewGlobalPersonHistory, isGlobalRole, isUnitScopedRole } f
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 import { useToast } from "@/hooks/use-toast";
+import type { ReincidenciaOrigenView } from "@/lib/domain/reincidencia-format";
 import { EfectivoDetail } from "./efectivo-detail";
 
 type Falta = {
@@ -26,14 +27,7 @@ type Falta = {
   unidadNombre?: string;
   reincidencia?: boolean;
   tipoRegistro?: string;
-  reincidenciaOrigen?: {
-    articuloBase?: string;
-    incisoBase?: string;
-    faltaReferenciaId?: string;
-    fechaSancionReferencia?: string;
-    memorandumReferencia?: string;
-    unidadReferenciaNombre?: string;
-  } | null;
+  reincidenciaOrigen?: ReincidenciaOrigenView;
   registradoPor?: string;
   estado?: "registrada" | "anulada";
 };
@@ -306,6 +300,37 @@ export function HistorialPage() {
 
   function getEstadoLabel(estado?: "registrada" | "anulada") {
     return estado === "anulada" ? "sin efecto" : "registrada";
+  }
+
+  function resolveReincidenciaChain(
+    origin: ReincidenciaOrigenView,
+    rowsById: Map<string, Falta>,
+    seenIds = new Set<string>(),
+  ): ReincidenciaOrigenView {
+    if (!origin?.faltaReferenciaId || origin.origenReincidenciaPrevia || seenIds.has(origin.faltaReferenciaId)) {
+      return origin;
+    }
+
+    const referenced = rowsById.get(origin.faltaReferenciaId);
+    if (!referenced?.reincidenciaOrigen) {
+      return origin;
+    }
+
+    seenIds.add(origin.faltaReferenciaId);
+    return {
+      ...origin,
+      origenReincidenciaPrevia: resolveReincidenciaChain(referenced.reincidenciaOrigen, rowsById, seenIds),
+    };
+  }
+
+  function enrichFaltaForDetail(row: Falta | null): Falta | null {
+    if (!row?.reincidenciaOrigen) return row;
+
+    const rowsById = new Map(faltasRows.map((item) => [item.id, item]));
+    return {
+      ...row,
+      reincidenciaOrigen: resolveReincidenciaChain(row.reincidenciaOrigen, rowsById),
+    };
   }
 
   function openRequestModal(row: Falta) {
@@ -775,7 +800,7 @@ export function HistorialPage() {
         </div>
       </Modal>
 
-      <EfectivoDetail falta={selectedFalta} open={!!selectedFalta} onClose={() => setSelectedFalta(null)} />
+      <EfectivoDetail falta={enrichFaltaForDetail(selectedFalta)} open={!!selectedFalta} onClose={() => setSelectedFalta(null)} />
     </div>
   );
 }

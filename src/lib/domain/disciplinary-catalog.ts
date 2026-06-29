@@ -1,5 +1,5 @@
 export type DisciplinaryArticle = {
-  id: "art9" | "art10" | "art11";
+  id: "art9" | "art10" | "art11" | "art12";
   label: string;
   incisos: string[];
 };
@@ -70,6 +70,13 @@ export const DISCIPLINARY_CATALOG: DisciplinaryArticle[] = [
       "20. No dar respuesta a los requerimientos del Fiscal Policial en el tiempo senalado.",
       "21. Agredirse fisica o verbalmente entre miembros de la institucion en cumplimiento de funciones.",
       "22. Perdida o deterioro de correspondencia oficial.",
+    ],
+  },
+  {
+    id: "art12",
+    label: "Art. 12 - Faltas graves con retiro temporal de tres meses a un año",
+    incisos: [
+      "1. Reincidencia de una de las faltas del articulo anterior.",
     ],
   },
 ];

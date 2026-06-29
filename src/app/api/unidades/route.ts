@@ -3,7 +3,7 @@ import { getRequestUser } from "@/lib/auth/request-user";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { isGlobalRole } from "@/lib/domain/roles";
-import { toTitleCaseEs } from "@/lib/domain/text-normalization";
+import { normalizeUnitName } from "@/lib/domain/text-normalization";
 
 type UnidadRow = {
   id: string;
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     if (!isGlobalRole(actor.role)) return forbidden();
 
     const body = await request.json();
-    const nombre = toTitleCaseEs(String(body?.nombre ?? ""));
+    const nombre = normalizeUnitName(String(body?.nombre ?? ""));
     if (!nombre) {
       return badRequest("Nombre de unidad es requerido");
     }
@@ -126,7 +126,7 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
     if (!body.id || typeof body.id !== "string") return badRequest("ID de unidad requerido");
-    const nombre = toTitleCaseEs(String(body?.nombre ?? ""));
+    const nombre = normalizeUnitName(String(body?.nombre ?? ""));
     if (!nombre) return badRequest("Nombre de unidad requerido");
 
     const adminDb = getAdminDb();

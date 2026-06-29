@@ -6,15 +6,20 @@ import {
   USER_ROLES,
 } from "@/lib/domain/constants";
 import {
-  getArticuloBaseForSancionEscalada,
+  getArticulosBaseForSancionEscalada,
   isReincidenciaEscalada,
   sameArticulo,
 } from "@/lib/domain/disciplinary-recidivism";
 import { resolveRangoPolicial } from "@/lib/domain/rangos-policiales";
 import {
+  getSanctionDocumentPrefix,
+  isValidSanctionDocumentNumber,
+} from "@/lib/domain/sanction-document";
+import {
   normalizeCi,
   normalizeFreeText,
   normalizePersonName,
+  normalizeWhitespace,
   toTitleCaseEs,
 } from "@/lib/domain/text-normalization";
 
@@ -39,7 +44,7 @@ export const createFaltaSchema = z
     articulo: z.string().transform(toTitleCaseEs).pipe(z.string().min(1)),
     inciso: z.string().transform(normalizeFreeText).pipe(z.string().min(1)),
     fechaSancion: isoDateSchema,
-    memorandum: z.string().transform(toTitleCaseEs).pipe(z.string().min(1)),
+    memorandum: z.string().transform(normalizeWhitespace).pipe(z.string().min(1)),
     motivo: z.string().transform(normalizeFreeText).pipe(z.string().min(3)),
     modoRegistro: z.enum(["actual", "historico"]).optional(),
     unidadEfectivoHistoricaId: z.string().optional(),
@@ -47,12 +52,19 @@ export const createFaltaSchema = z
   })
   .superRefine((value, ctx) => {
     const isEscalada = isReincidenciaEscalada(value.articulo, value.inciso);
+    if (!isValidSanctionDocumentNumber(value.articulo, value.memorandum)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["memorandum"],
+        message: `Formato esperado: ${getSanctionDocumentPrefix(value.articulo)}001/2026`,
+      });
+    }
 
     if (!isEscalada && value.reincidenciaOrigen) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["reincidenciaOrigen"],
-        message: "Solo Art. 10 inc. 1 y Art. 11 inc. 1 pueden incluir origen de reincidencia",
+        message: "Solo los incisos de reincidencia escalada pueden incluir origen de reincidencia",
       });
       return;
     }
@@ -67,8 +79,8 @@ export const createFaltaSchema = z
     }
 
     if (isEscalada && value.reincidenciaOrigen) {
-      const articuloBaseEsperado = getArticuloBaseForSancionEscalada(value.articulo, value.inciso);
-      if (!articuloBaseEsperado || !sameArticulo(value.reincidenciaOrigen.articuloBase, articuloBaseEsperado)) {
+      const articulosBaseEsperados = getArticulosBaseForSancionEscalada(value.articulo, value.inciso);
+      if (!articulosBaseEsperados.some((articuloBase) => sameArticulo(value.reincidenciaOrigen!.articuloBase, articuloBase))) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["reincidenciaOrigen", "articuloBase"],
@@ -110,7 +122,7 @@ export const createPersonalSchema = z.object({
   apellidos: z.string().transform(normalizePersonName).pipe(z.string().min(1)),
   sexo: z.enum(["Masculino", "Femenino"]),
   unidadId: z.string().min(1),
-  unidadNombre: z.string().transform(toTitleCaseEs).pipe(z.string().min(1)),
+  unidadNombre: z.string().transform(normalizeWhitespace).pipe(z.string().min(1)),
   estado: personalEstadoSchema,
 });
 

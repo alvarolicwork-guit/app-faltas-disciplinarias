@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Card } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useUnidades } from "@/hooks/use-unidades";
 import { RANGOS_POLICIALES } from "@/lib/domain/rangos-policiales";
+import { canBulkImportPersonal } from "@/lib/domain/roles";
 
 type ImportResult = {
   importId?: string;
@@ -94,6 +96,7 @@ function parseCsvAuto(text: string): CsvParseResult {
 
 export function ImportPage() {
   const { post, apiFetch } = useApi();
+  const { sessionUser } = useAuth();
   const toast = useToast();
   const { getUnitName, unitOptions } = useUnidades();
   const [file, setFile] = useState<File | null>(null);
@@ -103,6 +106,7 @@ export function ImportPage() {
   const [preview, setPreview] = useState<string[][]>([]);
   const [detectedDelimiter, setDetectedDelimiter] = useState<"," | ";" | null>(null);
   const isGlobalImport = true;
+  const canUseBulkImport = sessionUser ? canBulkImportPersonal(sessionUser.role) : false;
   const [creating, setCreating] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [newPersonal, setNewPersonal] = useState({
@@ -313,7 +317,8 @@ export function ImportPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <Card className="p-5">
+      {canUseBulkImport && (
+        <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-4">Importar Personal desde CSV/Excel</h3>
 
         <div className="p-3 rounded-xl bg-[var(--info-50)] border border-[var(--info-100)]">
@@ -386,7 +391,8 @@ export function ImportPage() {
         <p className="text-xs text-[var(--danger-600)] mt-2">
           Acción restringida a super admin. Requiere confirmación explícita y motivo de auditoría.
         </p>
-      </Card>
+        </Card>
+      )}
 
       <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-2">Nuevo Efectivo (Ingreso Individual)</h3>

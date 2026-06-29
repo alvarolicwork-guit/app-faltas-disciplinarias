@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     const displayName = body?.displayName ? toTitleCaseEs(String(body.displayName)) : "";
     const role = String(body?.role ?? "").trim();
     const unidadId = body?.unidadId ? String(body.unidadId).trim() : null;
-    const unidadNombre = body?.unidadNombre ? toTitleCaseEs(String(body.unidadNombre)) : null;
+    const unidadNombre = body?.unidadNombre ? normalizeWhitespace(String(body.unidadNombre)) : null;
     const gradoRaw = normalizeWhitespace(String(body?.grado ?? ""));
     const nombres = toTitleCaseEs(String(body?.nombres ?? ""));
     const apellidos = toTitleCaseEs(String(body?.apellidos ?? ""));
