@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-27",
+  "status": "local_validation_passed",
+  "baselineCommit": "b141f5b7321e3f19bf4643595b5deeced511466e",
+  "productionWrites": false,
+  "productionReadOnlyInventory": true,
+  "published": false,
+  "checks": {
+    "domainTests": { "passed": 10, "failed": 0 },
+    "firestoreAndAuthEmulatorTests": { "passed": 16, "failed": 0, "project": "demo-app-faltas" },
+    "historicalImportTests": { "passed": 5, "failed": 0 },
+    "browserWorkflow": { "passed": true, "engine": "Chrome", "fixturesOnly": true },
+    "lint": "passed",
+    "typescript": "passed",
+    "productionBuild": "passed",
+    "nextVersion": "16.4.3"
+  },
+  "dependencyAudit": { "total": 13, "critical": 0, "high": 4, "moderate": 8, "low": 1 },
+  "pendingOperationalSteps": [
+    "Restorable institutional backup and isolated restoration verification",
+    "Authenticated periodic expiry processor configuration",
+    "Publication authorization, coordinated server/client/Firestore release and deployed validation"
+  ],
+  "limitations": [
+    "Bulk historical rollback blocked; individual cancellation with impact is available",
+    "Ambiguous legacy chains require review rather than invented links",
+    "BSFP remains disabled locally; its new contract requires registrar session and confirmation",
+    "Residual dependency advisories require separate major-version/transitive evaluation"
+  ]
+}

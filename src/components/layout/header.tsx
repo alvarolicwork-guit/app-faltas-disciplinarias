@@ -5,9 +5,10 @@ import { useAuth } from "@/hooks/use-auth";
 import type { ModuleKey } from "./sidebar";
 
 const titles: Record<ModuleKey, string> = {
+  auditoria: "Informes de Auditoría",
   dashboard: "Dashboard",
   registro: "Registro de Falta",
-  personal: "Personal por Unidad",
+  personal: "Personal y Sancionados",
   historial: "Historial de Sanciones",
   usuarios: "Gestión de Usuarios",
   unidades: "Unidades Policiales",

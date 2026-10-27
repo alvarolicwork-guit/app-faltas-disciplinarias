@@ -15,9 +15,14 @@ type ReporteData = {
   periodo: string;
   totalFaltas: number;
   porArticulo: { articulo: string; count: number }[];
+  porConducta?:{articulo:string;inciso:string;sanciones:number;reincidencias:number;personas:number;cadenas:number}[];
   porUnidad: { unidadNombre: string; count: number }[];
   reincidencias: number;
   reincidenciasBloqueadas?: number;
+  sancionesPorReincidencia?:number;
+  personasConReincidencia?:number;
+  personasSancionadas?:number;
+  cadenasRequierenRevision?:number;
 };
 
 export function ReportesPage() {
@@ -103,6 +108,9 @@ export function ReportesPage() {
 
       {data && !loading && (
         <>
+          <p>Sanciones vigentes por reincidencia: {data.sancionesPorReincidencia??0}. Personas con reincidencia: {data.personasConReincidencia??0}. El vencimiento del plazo no anula sanciones históricas.</p>
+          {!!data.cadenasRequierenRevision&&<p role="alert">{data.cadenasRequierenRevision} registros requieren revisión de cadena y no se incluyen en el desglose por conducta original.</p>}
+          {!!data.porConducta?.length && <Card className="p-4 overflow-x-auto"><h3 className="font-semibold mb-2">Sanciones por conducta original</h3><table className="text-sm w-full"><thead><tr><th>Conducta</th><th>Sanciones vigentes</th><th>Por reincidencia</th><th>Personas</th><th>Cadenas históricas</th></tr></thead><tbody>{data.porConducta.map(c=><tr key={c.articulo+c.inciso}><td>{c.articulo.split(" - ")[0]} / {c.inciso}</td><td>{c.sanciones}</td><td>{c.reincidencias}</td><td>{c.personas}</td><td>{c.cadenas}</td></tr>)}</tbody></table></Card>}
           {/* Summary KPIs */}
           <div className="grid grid-cols-3 gap-3">
             <Card className="p-4 text-center">

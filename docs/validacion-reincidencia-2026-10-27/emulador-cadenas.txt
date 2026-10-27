@@ -1,0 +1,14 @@
+i  emulators: Starting emulators: auth, firestore
+i  emulators: Detected demo project ID "demo-app-faltas", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  emulators: Shutting down emulators.
+i  hub: Stopping emulator hub
+
+Error: TIMEOUT: Port 4400 on 127.0.0.1 was not active within 60000ms
+┌─────────────────────────────────────────────────────────────┐
+│             firebase-tools update check failed              │
+│             Try running with sudo or get access             │
+│            to the local update config store via             │
+│ sudo chown -R $USER:$(id -gn $USER) C:\Users\Alvaro\.config │
+└─────────────────────────────────────────────────────────────┘
+
+Error: An unexpected error has occurred.

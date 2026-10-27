@@ -15,6 +15,8 @@
 
 # next.js
 /.next/
+/.next-demo/
+/.local-demo/
 /out/
 
 # production
@@ -36,6 +38,9 @@ yarn-error.log*
 
 # firebase
 firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+/.firebase/
 dev-server*.log
 
 # vercel

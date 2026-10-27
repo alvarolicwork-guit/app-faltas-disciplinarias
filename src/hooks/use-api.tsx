@@ -8,7 +8,7 @@ type ApiOptions = Omit<RequestInit, "headers"> & {
 };
 
 export function useApi() {
-  const { getToken } = useAuth();
+  const { getToken, refreshSession } = useAuth();
 
   const apiFetch = useCallback(
     async <T = unknown>(path: string, init?: ApiOptions): Promise<T> => {
@@ -24,16 +24,17 @@ export function useApi() {
         },
       });
 
-      const payload = await response.json();
+      const payload = await response.json().catch(() => ({ error: `Respuesta no válida del servidor (${response.status})` }));
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) await refreshSession();
         const msg = payload.error ?? payload.message ?? `Error ${response.status}`;
         throw new ApiError(msg, response.status, payload);
       }
 
       return payload as T;
     },
-    [getToken],
+    [getToken, refreshSession],
   );
 
   const get = useCallback(

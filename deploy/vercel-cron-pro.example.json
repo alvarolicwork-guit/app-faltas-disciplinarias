@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/internal/expire-requests", "schedule": "*/5 * * * *" }
+  ]
+}

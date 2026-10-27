@@ -1,3 +1,5 @@
+import { persistAccess } from "@/lib/server/user-access";
+import { OperationError, operationError } from "@/lib/server/operations";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
       email,
       password,
       displayName: displayName || undefined,
+      disabled: true,
     });
 
     const userData = {
@@ -149,7 +152,9 @@ export async function POST(request: NextRequest) {
       updatedAt: Timestamp.now(),
     };
 
-    await db.collection("users").doc(userRecord.uid).set(userData);
+    await db.collection("users").doc(userRecord.uid).set({ ...userData, status: "bloqueado", isActive: false });
+    await persistAccess(actor, userRecord.uid, userData);
+    await auth.updateUser(userRecord.uid, { disabled: false });
 
     await db.collection("audit_logs").add({
       actorUid: actor.uid,
@@ -165,6 +170,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, uid: userRecord.uid }, { status: 201 });
   } catch (err) {
+    if (err instanceof OperationError) return operationError(err);
     const msg = err instanceof Error ? err.message : "Error al crear usuario";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
@@ -232,7 +238,7 @@ export async function PATCH(request: NextRequest) {
     updates.isActive = nextStatus === "activo";
 
     const nextRole = String(updates.role ?? before?.role ?? "").trim();
-    const nextUnit = String(updates.unidadId ?? before?.unidadId ?? "").trim();
+    const nextUnit = String(Object.hasOwn(updates, "unidadId") ? updates.unidadId ?? "" : before?.unidadId ?? "").trim();
 
     if (UNIT_ROLES.has(nextRole) && !nextUnit) {
       return NextResponse.json({ error: "Los roles de unidad requieren unidadId" }, { status: 400 });
@@ -260,14 +266,12 @@ export async function PATCH(request: NextRequest) {
 
     updates.nombreCompleto = buildNombreCompleto(nextGrado, nextNombres, nextApellidos);
 
-    await userRef.update(updates);
+    await persistAccess(actor, uid, updates);
 
     const auth = getAdminAuth();
     const shouldDisable = nextStatus !== "activo";
     await auth.updateUser(uid, { disabled: shouldDisable });
-    if (shouldDisable) {
-      await auth.revokeRefreshTokens(uid);
-    }
+    await auth.revokeRefreshTokens(uid);
 
     await db.collection("audit_logs").add({
       actorUid: actor.uid,
@@ -282,7 +286,8 @@ export async function PATCH(request: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof OperationError) return operationError(error);
     return NextResponse.json({ error: "Error al actualizar usuario" }, { status: 500 });
   }
 }
@@ -356,7 +361,7 @@ export async function DELETE(request: NextRequest) {
       updatedAt: now,
     };
 
-    await userRef.update(updates);
+    await persistAccess(actor, uid, updates);
 
     const auth = getAdminAuth();
     await auth.updateUser(uid, { disabled: true });

@@ -1,13 +1,12 @@
+import { canonicalConduct, evaluateRecurrence, matchesDecision, newChainMetadata, resolveChain, snapshotChain, type ChainMetadata, type SanctionRow } from "@/lib/domain/recurrence-chain";
 import { createHash } from "node:crypto";
 
 import { DISCIPLINARY_CATALOG } from "@/lib/domain/disciplinary-catalog";
 import {
   articleNumber,
   incisoNumber,
-  isDirectReincidenciaControlSubject,
   isRegimenDisciplinarioReferral,
   isReincidenciaEscalada,
-  sameArticulo,
 } from "@/lib/domain/disciplinary-recidivism";
 import { resolveRangoPolicial } from "@/lib/domain/rangos-policiales";
 import {
@@ -33,7 +32,7 @@ export type RawHistoricalSanctionRow = {
   values: Record<string, SpreadsheetCell>;
 };
 
-export type HistoricalSanctionNormalized = {
+export type HistoricalSanctionNormalized = Partial<ChainMetadata> & {
   rowKey: string;
   sourceRow: number;
   ci: string;
@@ -85,7 +84,7 @@ export type UnitImportLookup = {
   estado?: string;
 };
 
-export type ExistingSanctionLookup = {
+export type ExistingSanctionLookup = Partial<ChainMetadata> & {
   id: string;
   personalId: string;
   ci: string;
@@ -128,6 +127,8 @@ const HEADER_ALIASES: Record<string, string> = {
   unidad: "unidad",
   codigo: "codigo_unidad",
   codigo_unidad: "codigo_unidad",
+  antecedente_id: "antecedente_id",
+  falta_referencia_id: "antecedente_id",
 };
 
 const REQUIRED_HEADERS = [
@@ -455,6 +456,7 @@ export function normalizeHistoricalRow(params: {
       unidadSancionId: unit.id,
     }),
     isEscalada: isReincidenciaEscalada(article.label, inciso),
+    ...(cellToString(row.values.antecedente_id) ? { originFaltaId: cellToString(row.values.antecedente_id) } : {}),
   };
 
   return {
@@ -468,104 +470,27 @@ export function normalizeHistoricalRow(params: {
   };
 }
 
-function dateMillis(value: string): number {
-  return new Date(`${value}T00:00:00.000Z`).getTime();
-}
-
-function isWithinPreviousYear(previous: string, current: string): boolean {
-  const diff = dateMillis(current) - dateMillis(previous);
-  return diff >= 0 && diff <= 365 * 86_400_000;
-}
-
-export function applyHistoricalConsistencyChecks(
-  rows: HistoricalSanctionPreviewRow[],
-  existing: ExistingSanctionLookup[],
-): void {
-  const seenKeys = new Set(existing.map((item) => item.importKey).filter(Boolean) as string[]);
-  const existingByPerson = new Map<string, ExistingSanctionLookup[]>();
-  for (const item of existing.filter((entry) => entry.estado === "registrada")) {
-    const list = existingByPerson.get(item.personalId) ?? [];
-    list.push(item);
-    existingByPerson.set(item.personalId, list);
-  }
-
-  const ordered = rows
-    .filter((row) => row.normalized)
-    .sort((a, b) => {
-      const dateCompare = a.normalized!.fechaSancion.localeCompare(b.normalized!.fechaSancion);
-      return dateCompare || a.sourceRow - b.sourceRow;
-    });
-  const acceptedByPerson = new Map<string, HistoricalSanctionPreviewRow[]>();
-
+export function applyHistoricalConsistencyChecks(rows: HistoricalSanctionPreviewRow[], existing: ExistingSanctionLookup[]): void {
+  const seenKeys = new Set(existing.map(r => r.importKey).filter(Boolean));
+  const working: SanctionRow[] = existing.map(r => ({ ...r }));
+  const ordered = [...rows].filter(r => r.normalized && r.status !== "error").sort((a,b) => a.normalized!.fechaSancion.localeCompare(b.normalized!.fechaSancion) || a.sourceRow - b.sourceRow);
   for (const row of ordered) {
     const item = row.normalized!;
-    if (seenKeys.has(item.importKey)) {
-      row.status = "duplicate";
-      row.errors.push({ field: "fila", message: "La sancion ya existe en Firebase o esta repetida en el archivo" });
-      continue;
-    }
+    if (seenKeys.has(item.importKey)) { row.status = "duplicate"; row.errors.push({field:"fila",message:"La sanción ya existe o está repetida en el archivo"}); continue; }
     seenKeys.add(item.importKey);
-
-    const importedPrevious = (acceptedByPerson.get(item.personalId) ?? []).filter(
-      (candidate) =>
-        candidate.normalized &&
-        isWithinPreviousYear(candidate.normalized.fechaSancion, item.fechaSancion),
-    );
-    const existingPrevious = (existingByPerson.get(item.personalId) ?? []).filter(
-      (candidate) => isWithinPreviousYear(candidate.fechaSancion, item.fechaSancion),
-    );
-
-    if (item.isEscalada) {
-      const targetArticle = articleNumber(item.articulo);
-      const allowedArticles = targetArticle === 10 ? [9] : targetArticle === 11 ? [9, 10] : [];
-      const importedCandidates = importedPrevious.filter((candidate) =>
-        allowedArticles.includes(articleNumber(candidate.normalized!.articulo) ?? 0),
-      );
-      const existingCandidates = existingPrevious.filter((candidate) =>
-        allowedArticles.includes(articleNumber(candidate.articulo) ?? 0),
-      );
-      const candidateCount = importedCandidates.length + existingCandidates.length;
-
-      if (candidateCount !== 1) {
-        row.status = "error";
-        row.errors.push({
-          field: "inciso",
-          message: candidateCount === 0
-            ? "No se encontro una falta previa valida para esta reincidencia"
-            : "Hay varios posibles origenes; registre esta reincidencia manualmente",
-        });
-        continue;
+    try {
+      let conduct = canonicalConduct(item.articulo, item.inciso);
+      if (item.isEscalada) {
+        if (!item.originFaltaId) throw new Error("Indique antecedente_id del registro concreto. No se deduce la conducta original por el artículo sancionador");
+        if (!existing.some(r => r.id === item.originFaltaId)) throw new Error("El antecedente debe existir previamente y cumplir siete días; no se permiten bases recién creadas en el mismo lote");
+        conduct = resolveChain(working, item.originFaltaId).metadata.conductaOrigen;
       }
-
-      if (importedCandidates.length === 1) {
-        item.originRowKey = importedCandidates[0].rowKey;
-      } else {
-        item.originFaltaId = existingCandidates[0].id;
-      }
-    } else if (isDirectReincidenciaControlSubject(item.articulo, item.inciso)) {
-      const directImported = importedPrevious.find((candidate) =>
-        candidate.normalized &&
-        sameArticulo(candidate.normalized.articulo, item.articulo) &&
-        incisoNumber(candidate.normalized.inciso) === incisoNumber(item.inciso),
-      );
-      const directExisting = existingPrevious.find(
-        (candidate) =>
-          sameArticulo(candidate.articulo, item.articulo) &&
-          incisoNumber(candidate.inciso) === incisoNumber(item.inciso),
-      );
-      if (directImported || directExisting) {
-        row.status = "error";
-        row.errors.push({
-          field: "inciso",
-          message: "Existe la misma falta dentro de 365 dias; requiere revision por reincidencia",
-        });
-        continue;
-      }
-    }
-
-    const accepted = acceptedByPerson.get(item.personalId) ?? [];
-    accepted.push(row);
-    acceptedByPerson.set(item.personalId, accepted);
+      const decision = evaluateRecurrence(working, item.personalId, item.fechaSancion, conduct);
+      if (!matchesDecision(item.articulo, item.inciso, item.originFaltaId ?? null, decision)) throw new Error("La tipificación del documento o su antecedente no corresponde al escalón vigente de esta conducta; requiere revisión");
+      const metadata = decision.metadata ?? newChainMetadata(item.rowKey, conduct, item.fechaSancion);
+      Object.assign(item,metadata);
+      working.push({ id:item.rowKey,personalId:item.personalId,estado:"registrada",articulo:item.articulo,inciso:item.inciso,fechaSancion:item.fechaSancion,...metadata,reincidenciaOrigen:snapshotChain(decision.nodes) });
+    } catch (error) { row.status="error"; row.errors.push({field:"reincidencia",message:error instanceof Error?error.message:"Cadena inconsistente"}); }
   }
 }
 

@@ -1,0 +1,58 @@
+Control Disciplinario
+
+Sistema Institucional
+
+Comando Departamental de Policía
+Chuquisaca
+
+registrador-e2e@example.test
+
+admin unidad
+Dashboard
+Registro de Falta
+Personal
+Historial
+Reportes
+
+UNIDAD
+
+Unidad de prueba
+
+Cerrar sesión
+Historial de Sanciones
+
+registrador-e2e@example.test
+
+admin unidad
+
+RE
+Notificaciones de la app (0 sin leer)
+
+Unidad asignada
+
+Unidad de prueba
+
+Buscar
+Actualizar
+registrada
+sin efecto
+todas
+Tabla
+Cards
+Mostrando 1 registros de Unidad de prueba
+
+No se pudo cargar el historial.
+
+Respuesta no válida del servidor (500)
+
+Reintentar
+Solicitudes para Dejar sin Efecto
+
+Seguimiento de solicitudes pendientes y aceptadas.
+
+pendiente
+aprobada
+rechazada
+Sin solicitudes
+
+No existen solicitudes para este estado.

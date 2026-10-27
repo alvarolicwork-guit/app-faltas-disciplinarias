@@ -29,6 +29,10 @@ type PreviewRow = {
     memorandum: string;
     unidadSancionId: string;
     unidadSancionNombre: string;
+    conductaOrigen?: {articulo:string;inciso:string};
+    originFaltaId?: string;
+    fechaInicioCadena?: string;
+    fechaVencimientoCadena?: string;
   } | null;
   errors: Issue[];
   warnings: Issue[];
@@ -64,6 +68,7 @@ type ImportSummary = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
+  building_preview: "Preparando análisis",
   preview: "Analizada",
   processing: "Procesando",
   confirmed: "Confirmada",
@@ -316,7 +321,7 @@ export function ImportarSancionesHistoricas() {
             <Badge variant="warning">Temporal</Badge>
           </div>
           <p className="mt-1 text-sm text-[var(--navy-500)]">
-            Analiza Excel o CSV antes de registrar sanciones. No modifica la unidad actual del efectivo.
+            Revise los datos del Excel o CSV antes de registrar sanciones. Para una reincidencia, indique en la columna antecedente_id la sanción anterior relacionada; la aplicación comprueba que corresponda a la misma falta, al tipo de reincidencia y al período permitido.
           </p>
         </div>
         <Button
@@ -416,6 +421,9 @@ export function ImportarSancionesHistoricas() {
                           <td className="px-3 py-2">
                             <p>{row.normalized?.articulo.split(" - ")[0] ?? row.original.articulo}</p>
                             <p className="text-[var(--navy-500)]">{row.normalized?.inciso ?? row.original.inciso}</p>
+                            {row.normalized?.conductaOrigen&&<p>Conducta: {row.normalized.conductaOrigen.articulo} / {row.normalized.conductaOrigen.inciso}</p>}
+                            {row.normalized?.originFaltaId&&<p>Antecedente: {row.normalized.originFaltaId}</p>}
+                            {row.normalized?.fechaVencimientoCadena&&<p>Plazo: {row.normalized.fechaInicioCadena} hasta {row.normalized.fechaVencimientoCadena}</p>}
                           </td>
                           <td className="px-3 py-2">{row.normalized?.memorandum ?? row.original.numero_documento_sancion}</td>
                           <td className="px-3 py-2">
@@ -521,11 +529,12 @@ export function ImportarSancionesHistoricas() {
                           <Button
                             variant="danger"
                             size="sm"
+                            disabled
                             loading={revertingId === item.id}
                             onClick={() => revertImport(item)}
                             icon={Icons.alertTriangle({ size: 14 })}
                           >
-                            Revertir
+                            Use cancelación individual en Historial
                           </Button>
                         )}
                         </div>

@@ -1,0 +1,56 @@
+
+> app-faltas@0.1.0 build
+> next build
+
+▲ Next.js 16.4.3 (Turbopack)
+- Environments: .env.local
+✓ Running next.config.ts took 30ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 609ms
+  Running TypeScript ...
+  Finished TypeScript in 2.0s ...
+  Collecting page data using 23 workers ...
+  Generating static pages using 23 workers (0/26) ...
+  Generating static pages using 23 workers (6/26) 
+  Generating static pages using 23 workers (12/26) 
+  Generating static pages using 23 workers (19/26) 
+✓ Generating static pages using 23 workers (26/26) in 246ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/antecedentes
+├ ƒ /api/auditoria
+├ ƒ /api/confirmaciones
+├ ƒ /api/dashboard
+├ ƒ /api/faltas
+├ ƒ /api/faltas/impacto
+├ ƒ /api/faltas/solicitudes
+├ ƒ /api/faltas/solicitudes/[id]/resolver
+├ ƒ /api/health
+├ ƒ /api/imports/faltas
+├ ƒ /api/imports/faltas/[id]/confirm
+├ ƒ /api/imports/faltas/[id]/errors
+├ ƒ /api/imports/faltas/[id]/revert
+├ ƒ /api/imports/personal
+├ ƒ /api/integraciones/sanciones
+├ ƒ /api/internal/expire-requests
+├ ƒ /api/me
+├ ƒ /api/notificaciones
+├ ƒ /api/personal
+├ ƒ /api/personal/[id]/transfer
+├ ƒ /api/reportes
+├ ƒ /api/transferencias
+├ ƒ /api/transferencias/solicitudes
+├ ƒ /api/transferencias/solicitudes/[id]/resolver
+├ ƒ /api/unidades
+├ ƒ /api/users
+├ ƒ /api/users/handover
+└ ƒ /api/users/password-change
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

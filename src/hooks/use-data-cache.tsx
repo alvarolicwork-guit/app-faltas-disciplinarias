@@ -49,12 +49,12 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
   const userKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const nextUserKey = sessionUser?.uid ?? null;
+    const nextUserKey = sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId ?? ""}` : null;
     if (userKeyRef.current !== nextUserKey) {
       cacheRef.current.clear();
       userKeyRef.current = nextUserKey;
     }
-  }, [sessionUser?.uid]);
+  }, [sessionUser]);
 
   const peek = useCallback(<T,>(key: string): CacheEntry<T> | null => {
     return (cacheRef.current.get(key) as CacheEntry<T> | undefined) ?? null;

@@ -1,0 +1,152 @@
+
+> app-faltas@0.1.0 test:emulator
+> firebase emulators:exec --only firestore,auth --project demo-app-faltas --config firebase.test.json "node --import tsx --test src/lib/server/workflow.emulator.test.ts"
+
+i  emulators: Starting emulators: auth, firestore
+i  emulators: Detected demo project ID "demo-app-faltas", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  firestore: Firestore Emulator logging to firestore-debug.log
++  firestore: Firestore Emulator UI websocket is running on 9150.
+i  Running script: node --import tsx --test src/lib/server/workflow.emulator.test.ts
+TAP version 13
+# Subtest: API: padrón global, unidad automática, confirmación y reintento único
+ok 1 - API: padrón global, unidad automática, confirmación y reintento único
+  ---
+  duration_ms: 1439.8423
+  type: 'test'
+  ...
+# Subtest: reglas Firestore: propio permitido, ajeno y cuenta bloqueada denegados
+ok 2 - reglas Firestore: propio permitido, ajeno y cuenta bloqueada denegados
+  ---
+  duration_ms: 283.7335
+  type: 'test'
+  ...
+# POST /api/faltas failed {
+#   error: OperationError: El antecedente podrá utilizarse desde 2026-11-02T11:32:17.833Z (siete días desde su registro)
+#       at recurrenceSnapshot (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\operations.ts:70:23)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:257:30)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\build\\src\\transaction.js:440:28)
+#       at async D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\build\\src\\transaction.js:412:28
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:165:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\workflow.emulator.test.ts:77:15)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'El antecedente podrá utilizarse desde 2026-11-02T11:32:17.833Z (siete días desde su registro)'
+# }
+# POST /api/faltas failed {
+#   error: OperationError: El antecedente tiene una solicitud de cancelación pendiente
+#       at recurrenceSnapshot (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\operations.ts:70:23)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:257:30)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\build\\src\\transaction.js:440:28)
+#       at async D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\build\\src\\transaction.js:412:28
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:165:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\workflow.emulator.test.ts:81:17)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'El antecedente tiene una solicitud de cancelación pendiente'
+# }
+# Subtest: API: reincidencia espera siete días y solicitudes; no permite duplicar base
+ok 3 - API: reincidencia espera siete días y solicitudes; no permite duplicar base
+  ---
+  duration_ms: 639.1689
+  type: 'test'
+  ...
+# Subtest: confirmación alterada y cancelación extraordinaria con impacto obsoleto se rechazan
+ok 4 - confirmación alterada y cancelación extraordinaria con impacto obsoleto se rechazan
+  ---
+  duration_ms: 58.1221
+  type: 'test'
+  ...
+# Subtest: solo autor solicita; aprobación conserva registro y notifica una vez
+ok 5 - solo autor solicita; aprobación conserva registro y notifica una vez
+  ---
+  duration_ms: 371.5569
+  type: 'test'
+  ...
+# Subtest: vencimiento se persiste y no permite aprobación tardía
+ok 6 - vencimiento se persiste y no permite aprobación tardía
+  ---
+  duration_ms: 3632.0828
+  type: 'test'
+  ...
+# Subtest: administrador departamental no cancela ajenas ni propias fuera de plazo
+ok 7 - administrador departamental no cancela ajenas ni propias fuera de plazo
+  ---
+  duration_ms: 125.4943
+  type: 'test'
+  ...
+# Subtest: extraordinaria cancela una y rebaja dependientes atómicamente
+ok 8 - extraordinaria cancela una y rebaja dependientes atómicamente
+  ---
+  duration_ms: 171.0887
+  type: 'test'
+  ...
+# Subtest: concurrencia de administradores no duplica rol activo por unidad
+ok 9 - concurrencia de administradores no duplica rol activo por unidad
+  ---
+  duration_ms: 3558.6429
+  type: 'test'
+  ...
+# Subtest: unidad ausente, cuenta bloqueada y primer cambio bloquean API
+ok 10 - unidad ausente, cuenta bloqueada y primer cambio bloquean API
+  ---
+  duration_ms: 58.0937
+  type: 'test'
+  ...
+# Subtest: operador y visor no registran; solo superadministrador genera auditoría
+ok 11 - operador y visor no registran; solo superadministrador genera auditoría
+  ---
+  duration_ms: 131.3073
+  type: 'test'
+  ...
+# Subtest: notificaciones de otra unidad no se listan ni se pueden marcar
+ok 12 - notificaciones de otra unidad no se listan ni se pueden marcar
+  ---
+  duration_ms: 85.1415
+  type: 'test'
+  ...
+# Subtest: cancelación departamental propia dentro de plazo conserva autor y motivo
+ok 13 - cancelación departamental propia dentro de plazo conserva autor y motivo
+  ---
+  duration_ms: 123.1448
+  type: 'test'
+  ...
+# Subtest: relevo pendiente reserva unidad, bloquea saliente y permite recuperación
+ok 14 - relevo pendiente reserva unidad, bloquea saliente y permite recuperación
+  ---
+  duration_ms: 355.1633
+  type: 'test'
+  ...
+# Subtest: toda la cadena debe estar vigente y sin solicitudes pendientes
+ok 15 - toda la cadena debe estar vigente y sin solicitudes pendientes
+  ---
+  duration_ms: 246.0811
+  type: 'test'
+  ...
+# Subtest: integración no omite sesión ni confirmación y rechaza contrato antiguo
+ok 16 - integración no omite sesión ni confirmación y rechaza contrato antiguo
+  ---
+  duration_ms: 201.2136
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12426.6523
++  Script exited successfully (code 0)
+i  emulators: Shutting down emulators.
+i  firestore: Stopping Firestore Emulator
+!  Firestore Emulator has exited upon receiving signal: SIGINT
+i  auth: Stopping Authentication Emulator
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator

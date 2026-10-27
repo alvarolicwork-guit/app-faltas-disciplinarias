@@ -17,6 +17,12 @@ function getFirebaseAdminApp(): App {
     return getApps()[0];
   }
 
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    const projectId = readEnv("FIREBASE_PROJECT_ID");
+    if (!projectId.startsWith("demo-")) throw new Error("Emulator testing requires a demo- project");
+    return initializeApp({ projectId });
+  }
+
   return initializeApp({
     credential: cert({
       projectId: readEnv("FIREBASE_PROJECT_ID"),

@@ -1,0 +1,33 @@
+{
+  "fecha": "2026-10-27T11:53:46.255Z",
+  "entorno": "Auth/Firestore locales demo-app-faltas; handlers reales invocados con NextRequest, sin servidor HTTP ni navegador",
+  "datosReales": false,
+  "nota": "Las cinco aserciones confirman defectos, no correcciones",
+  "results": [
+    {
+      "id": "R01",
+      "estado": 409,
+      "defecto": "Rechaza11/1 de conducta9/2 usando11/1 de conducta9/1 y sugiere12/1"
+    },
+    {
+      "id": "R02",
+      "estado": 409,
+      "defecto": "Sugiere11/1 aunque esa cadena ya contiene11/1; omite el escalón final al buscar la raíz9/1"
+    },
+    {
+      "id": "R03",
+      "estado": 201,
+      "defecto": "Registra9/1 otra vez aunque existe10/1 de esa misma conducta dentro de365d"
+    },
+    {
+      "id": "R04",
+      "estado": 201,
+      "defecto": "Registra11/1 desde9/1 sin escalón10/1"
+    },
+    {
+      "id": "R06",
+      "estado": 201,
+      "defecto": "Registra fecha de sanción2099-01-01"
+    }
+  ]
+}

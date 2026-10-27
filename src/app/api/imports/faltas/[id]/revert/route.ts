@@ -25,6 +25,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         { status: 403 },
       );
     }
+    // The former bulk reversal cannot enforce the new individual cancellation
+    // and dependent-chain amendment workflow. Preserve the lot and use its
+    // individual records in Historial/Auditoría instead of a partial bulk edit.
+    if (actor.role === "super_admin") {
+      return NextResponse.json({ error: "La reversión masiva fue retirada para proteger las cadenas. Use la cancelación extraordinaria individual con vista de impacto." }, { status: 409 });
+    }
     const body = await request.json().catch(() => ({}));
     const confirmation = safeString(body?.confirmation).trim();
     const reason = safeString(body?.reason).trim();

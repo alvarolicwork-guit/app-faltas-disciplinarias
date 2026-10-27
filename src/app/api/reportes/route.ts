@@ -1,3 +1,5 @@
+import { isReincidenciaEscalada } from "@/lib/domain/disciplinary-recidivism";
+import { annotateSanctions, statisticsByConduct } from "@/lib/server/chain-views";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
     query = query.orderBy("fechaSancion", "desc");
 
     const snap = await query.get();
-    const allFaltas = snap.docs.map((d) => d.data());
+    const allFaltas = await annotateSanctions(db,snap.docs.map(d=>({...d.data(),id:d.id})));
 
     const totalFaltas = allFaltas.length;
 
@@ -74,9 +76,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       periodo,
       totalFaltas,
+      personasSancionadas:new Set(allFaltas.map(f=>f.personalId)).size,
       reincidencias: reincidenciasBloqueadas,
       reincidenciasBloqueadas,
+      sancionesPorReincidencia:allFaltas.filter(f=>isReincidenciaEscalada(String(f.articulo),String(f.inciso))).length,
+      personasConReincidencia:new Set(allFaltas.filter(f=>isReincidenciaEscalada(String(f.articulo),String(f.inciso))).map(f=>f.personalId)).size,
+      cadenasVencidas:new Set(allFaltas.filter(f=>f.estadoPlazoCadena==="vencida").map(f=>f.cadenaId)).size,
+      cadenasRequierenRevision:allFaltas.filter(f=>f.estadoPlazoCadena==="requiere_revision").length,
       porArticulo,
+      porConducta:statisticsByConduct(allFaltas),
       porUnidad,
     });
   } catch (error) {

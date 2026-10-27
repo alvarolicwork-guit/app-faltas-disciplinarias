@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState, Skeleton, Badge } from "@/components/ui/primitives";
@@ -8,11 +8,12 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useApi } from "@/hooks/use-api";
-import { useAuth, canReadGlobalInfo, isGlobalRole, isUnitScopedRole } from "@/hooks/use-auth";
+import { useAuth, canReadGlobalInfo, isUnitScopedRole } from "@/hooks/use-auth";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
 import { useUnidades } from "@/hooks/use-unidades";
 import { getRangoOrder } from "@/lib/domain/rangos-policiales";
+import { HistorialPersonal } from "./historial-personal";
 
 type PersonalRow = {
   id: string;
@@ -64,8 +65,13 @@ export function PersonalPage() {
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<PersonalRow[]>([]);
+  const [personalTotal, setPersonalTotal] = useState(0);
+  const [personalOffset, setPersonalOffset] = useState(0);
+  const [personalNextOffset, setPersonalNextOffset] = useState<number | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState("");
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const personalFetchVersion = useRef(0);
   const [selectedPersonal, setSelectedPersonal] = useState<PersonalRow | null>(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [targetUnitId, setTargetUnitId] = useState("");
@@ -80,17 +86,23 @@ export function PersonalPage() {
 
   const isUnitScoped = sessionUser ? isUnitScopedRole(sessionUser.role) : false;
   const canReadGlobal = sessionUser ? canReadGlobalInfo(sessionUser.role) : false;
-  const canTransfer = sessionUser ? sessionUser.role === "admin_unidad" || isGlobalRole(sessionUser.role) : false;
+  const canTransfer = false;
   const sessionUnitId = sessionUser?.unidadId ?? "";
   const effectiveUnitId = isUnitScoped ? (sessionUser?.unidadId ?? "") : selectedUnitId;
 
-  const fetchPersonal = useCallback(async (options?: { force?: boolean; query?: string }) => {
+  const fetchPersonal = useCallback(async (options?: { force?: boolean; query?: string; offset?: number }) => {
+    const version = ++personalFetchVersion.current;
     const queryText = options?.query?.trim() ?? "";
     const canSearchGlobally = canReadGlobal && !effectiveUnitId;
 
     if (!effectiveUnitId && (!canSearchGlobally || queryText.length < 2)) {
       setRows([]);
       setPersonalUpdatedAt(null);
+      setPersonalTotal(0);
+      setPersonalOffset(0);
+      setPersonalNextOffset(null);
+      setAppliedSearch("");
+      setLoading(false);
       return;
     }
 
@@ -99,22 +111,29 @@ export function PersonalPage() {
       const params = new URLSearchParams();
       if (effectiveUnitId) params.set("unidadId", effectiveUnitId);
       if (queryText) params.set("q", queryText);
-      params.set("limit", effectiveUnitId && !queryText ? "300" : "50");
+      params.set("offset", String(options?.offset ?? 0));
+      params.set("limit", "50");
 
       const cacheScope = effectiveUnitId ? `unidad:${effectiveUnitId}` : "global";
       const cacheQuery = queryText ? queryText.toLowerCase() : "all";
       const payload = await fetchWithCache(
-        `personal:${cacheScope}:${cacheQuery}`,
-        () => get<{ data: PersonalRow[] }>(`/api/personal?${params.toString()}`),
+        `personal:${cacheScope}:${cacheQuery}:${options?.offset ?? 0}`,
+        () => get<{ data: PersonalRow[]; total: number; nextOffset: number | null }>(`/api/personal?${params.toString()}`),
         { ttlMs: queryText ? 2 * 60 * 1000 : 5 * 60 * 1000, force: options?.force },
       );
+      if (version !== personalFetchVersion.current) return;
       setRows(payload.data.data);
+      setAppliedSearch(queryText);
+      setPersonalTotal(payload.data.total);
+      setPersonalOffset(options?.offset ?? 0);
+      setPersonalNextOffset(payload.data.nextOffset);
       setPersonalUpdatedAt(payload.storedAt);
     } catch (error) {
+      if (version !== personalFetchVersion.current) return;
       setRows([]);
       toastError("Error al cargar personal", error instanceof Error ? error.message : "No se pudo cargar personal");
     } finally {
-      setLoading(false);
+      if (version === personalFetchVersion.current) setLoading(false);
     }
   }, [canReadGlobal, effectiveUnitId, fetchWithCache, get, toastError]);
 
@@ -172,30 +191,20 @@ export function PersonalPage() {
   }
 
   const orderedRows = useMemo(() => {
-    const filter = search.trim().toLowerCase();
-    const filtered = filter
-      ? rows.filter((row) => {
-        const fullName = `${row.apellidos} ${row.nombres}`.toLowerCase();
-        const ci = String(row.ci ?? "").toLowerCase();
-        const grado = String(row.grado ?? "").toLowerCase();
-        return fullName.includes(filter) || ci.includes(filter) || grado.includes(filter);
-      })
-      : rows;
-
-    return [...filtered].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       const rankA = getRangoOrder(a.grado);
       const rankB = getRangoOrder(b.grado);
       if (rankA !== rankB) return rankA - rankB;
 
-      const apellidosCmp = a.apellidos.localeCompare(b.apellidos, "es", { sensitivity: "base" });
+      const apellidosCmp = String(a.apellidos ?? "").localeCompare(String(b.apellidos ?? ""), "es", { sensitivity: "base" });
       if (apellidosCmp !== 0) return apellidosCmp;
 
-      const nombresCmp = a.nombres.localeCompare(b.nombres, "es", { sensitivity: "base" });
+      const nombresCmp = String(a.nombres ?? "").localeCompare(String(b.nombres ?? ""), "es", { sensitivity: "base" });
       if (nombresCmp !== 0) return nombresCmp;
 
       return String(a.ci).localeCompare(String(b.ci), "es", { sensitivity: "base" });
     });
-  }, [rows, search]);
+  }, [rows]);
 
   const targetUnitOptions = useMemo(() => {
     const currentUnit = selectedPersonal?.unidadId ?? effectiveUnitId;
@@ -203,19 +212,9 @@ export function PersonalPage() {
   }, [effectiveUnitId, selectedPersonal, unitOptions]);
 
   const pendingIncomingCount = requests.filter((row) => row.estado === "pendiente" && row.toUnidadId === sessionUser?.unidadId).length;
-  const globalSearchText = search.trim();
   const canUseGlobalPersonalSearch = !isUnitScoped && canReadGlobal;
-  const showUnitSelectorPrompt = canUseGlobalPersonalSearch && !effectiveUnitId && !globalSearchText;
-  const showUnidadActualColumn = canUseGlobalPersonalSearch;
-  const selectedFullName = selectedPersonal?.nombreCompleto ?? `${selectedPersonal?.grado ?? ""} ${selectedPersonal?.nombres ?? ""} ${selectedPersonal?.apellidos ?? ""}`.trim();
-
-  function openSendModal() {
-    if (!selectedPersonal) return;
-    setTargetUnitId("");
-    setTransferReason("");
-    setSendModalOpen(true);
-  }
-
+  const showUnitSelectorPrompt = canUseGlobalPersonalSearch && !effectiveUnitId && !appliedSearch && !loading;
+  const showUnidadActualColumn = false;
   async function submitTransferRequest() {
     if (!selectedPersonal) return;
     if (!targetUnitId) {
@@ -294,29 +293,28 @@ export function PersonalPage() {
       <Card className="p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h3 className="text-base font-bold text-[var(--navy-900)]">Personal</h3>
+            <h3 className="text-base font-bold text-[var(--navy-900)]">{isUnitScoped || effectiveUnitId ? "Personal con registros de sanciones" : "Personal del comando departamental"}</h3>
             {personalUpdatedAt && (
               <p className="text-xs text-[var(--navy-400)]">
                 Datos conservados en esta sesion.
               </p>
             )}
             <p className="text-sm text-[var(--navy-500)]">
-              Listado por unidad o búsqueda individual por CI, nombre o apellido.
+              Seleccione un efectivo para consultar su historial de sanciones.
             </p>
           </div>
-          {(effectiveUnitId || (canUseGlobalPersonalSearch && globalSearchText.length >= 2)) && (
-            <Button variant="outline" size="sm" onClick={() => { void fetchPersonal({ force: true, query: effectiveUnitId ? "" : globalSearchText }); }} loading={loading}>
+          {(effectiveUnitId || (canUseGlobalPersonalSearch && appliedSearch.length >= 2)) && (
+            <Button variant="outline" size="sm" onClick={() => { void fetchPersonal({ force: true, query: appliedSearch }); }} loading={loading}>
               Actualizar
             </Button>
           )}
           {!isUnitScoped && canReadGlobal && (
             <div className="w-full md:w-[360px]">
               <Select
-                label="Unidad"
+                label="Unidad sancionadora"
                 value={selectedUnitId}
-                onChange={(e) => setSelectedUnitId(e.target.value)}
-                options={unitOptions}
-                placeholder="Seleccionar unidad"
+                onChange={(e) => {setSelectedUnitId(e.target.value);setSearch("");setAppliedSearch("");setSelectedPersonal(null);}}
+                options={[{value:"",label:"Todo el padrón departamental"},...unitOptions]}
               />
             </div>
           )}
@@ -338,19 +336,15 @@ export function PersonalPage() {
           {showUnitSelectorPrompt ? (
             <EmptyState
               title="Seleccione una unidad o busque un efectivo"
-              description="Puede listar una unidad completa o buscar individualmente por CI, nombre o apellido en todo el comando."
-            />
-          ) : !effectiveUnitId && canUseGlobalPersonalSearch && globalSearchText.length < 2 ? (
-            <EmptyState
-              title="Búsqueda global"
-              description="Ingrese al menos 2 caracteres para buscar un efectivo en todo el personal del comando."
+              description="Busque por CI, nombres o apellidos en todo el comando. También puede seleccionar una unidad para ver las personas que tienen sanciones registradas allí."
             />
           ) : loading ? (
             <div className="space-y-2">{[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-11 rounded-xl" />)}</div>
           ) : orderedRows.length === 0 ? (
-            <EmptyState title="Sin resultados" description={effectiveUnitId ? "No hay personal cargado para esta unidad o no coincide la búsqueda." : "No se encontró personal con ese criterio en el comando."} />
+            <EmptyState title="Sin resultados" description={effectiveUnitId ? "No hay personal sancionado en esta unidad o no coincide la búsqueda." : "No se encontró personal con ese criterio en el comando."} />
           ) : (
             <div className="overflow-auto rounded-xl border border-[var(--border)]">
+              <div className="flex flex-wrap gap-3 items-center p-3"><span>{personalTotal} personas; mostrando desde {personalOffset + 1}{appliedSearch ? ` · Búsqueda: ${appliedSearch}` : ""}</span><Button disabled={loading || personalOffset === 0} onClick={() => { void fetchPersonal({ force: true, query: appliedSearch, offset: Math.max(0, personalOffset - 50) }); }}>Anterior</Button><Button disabled={loading || personalNextOffset === null} onClick={() => { void fetchPersonal({ force: true, query: appliedSearch, offset: personalNextOffset! }); }}>Siguiente</Button></div>
               <table className="min-w-full text-sm">
                 <thead className="bg-[var(--navy-50)]">
                   <tr>
@@ -359,6 +353,7 @@ export function PersonalPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Apellidos</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Nombres</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">CI</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Historial</th>
                                       {showUnidadActualColumn && (
                       <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Unidad actual</th>
                     )}
@@ -371,11 +366,12 @@ export function PersonalPage() {
                       className="hover:bg-[var(--navy-50)] transition-colors cursor-pointer"
                       onClick={() => setSelectedPersonal(row)}
                     >
-                      <td className="px-4 py-3 text-[var(--navy-700)]">{index + 1}</td>
+                      <td className="px-4 py-3 text-[var(--navy-700)]">{personalOffset + index + 1}</td>
                       <td className="px-4 py-3 text-[var(--navy-900)] font-medium">{row.grado}</td>
                       <td className="px-4 py-3 text-[var(--navy-700)]">{row.apellidos}</td>
                       <td className="px-4 py-3 text-[var(--navy-700)]">{row.nombres}</td>
                       <td className="px-4 py-3 text-[var(--navy-900)] font-semibold">{row.ci}</td>
+                      <td className="px-4 py-3"><Button size="sm" variant="outline" aria-label={`Ver historial de ${row.nombreCompleto ?? `${row.nombres} ${row.apellidos}`}`} onClick={() => setSelectedPersonal(row)}>Ver historial</Button></td>
                                           {showUnidadActualColumn && (
                         <td className="px-4 py-3 text-[var(--navy-700)] min-w-[220px]">{row.unidadNombre}</td>
                       )}
@@ -461,31 +457,7 @@ export function PersonalPage() {
         </Card>
       )}
 
-      <Modal
-        open={!!selectedPersonal}
-        onClose={() => setSelectedPersonal(null)}
-        title="Detalle del efectivo"
-        size="md"
-        footer={(
-          <>
-            <Button variant="outline" onClick={() => setSelectedPersonal(null)}>Cerrar</Button>
-            {canTransfer && selectedPersonal && (
-              <Button variant="primary" onClick={openSendModal}>Enviar a otra unidad</Button>
-            )}
-          </>
-        )}
-      >
-        <div className="space-y-3">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--navy-50)] p-3">
-            <p className="text-sm font-semibold text-[var(--navy-900)]">{selectedFullName}</p>
-            <p className="text-xs text-[var(--navy-600)]">CI: {selectedPersonal?.ci ?? "-"}</p>
-            <p className="text-xs text-[var(--navy-600)]">Unidad actual: {selectedPersonal?.unidadNombre ?? "-"}</p>
-          </div>
-          <p className="text-sm text-[var(--navy-500)]">
-            El envío a otra unidad requiere aceptación de la unidad destino en un plazo de 24 horas.
-          </p>
-        </div>
-      </Modal>
+      {selectedPersonal && <HistorialPersonal key={`${sessionUser?.uid}:${sessionUser?.role}:${selectedPersonal.id}:${effectiveUnitId}`} person={selectedPersonal} initialUnitId={effectiveUnitId} unitName={unitOptions.find(unit => unit.value === effectiveUnitId)?.label ?? sessionUser?.unidadNombre ?? ""} onClose={() => setSelectedPersonal(null)} />}
 
       <Modal
         open={sendModalOpen}

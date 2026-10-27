@@ -9,6 +9,8 @@ import { Card, EmptyState, Skeleton, Badge } from "@/components/ui/primitives";
 import { ApiError, useApi } from "@/hooks/use-api";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
+import { pendingRequest, requestDeadline } from "@/lib/domain/sanction-policy";
+import { boliviaDateTime } from "@/lib/domain/audit-report";
 
 type Solicitud = {
   id: string;
@@ -20,14 +22,25 @@ type Solicitud = {
   faltaResumen?: { nombreCompleto?: string; ci?: string; memorandum?: string };
   solicitadaPor?: { email?: string };
   createdAt?: string;
+  expiresAt?: string | null;
   resolvedAt?: string;
   tipoSolicitud?: "representacion" | "error_insercion";
   memorandumRepresentacion?: string | null;
   comentario?: string | null;
 };
 
+function remainingTime(row: Solicitud, now: number): string {
+  const deadline = requestDeadline(row);
+  if (deadline === null) return "Fecha de vencimiento no disponible; requiere revisión";
+  const remaining = deadline - now;
+  if (remaining <= 0) return "Plazo vencido";
+  const minutes = Math.ceil(remaining / 60_000);
+  const days = Math.floor(minutes / 1440), hours = Math.floor((minutes % 1440) / 60);
+  return days ? `Vence en ${days} d${hours ? ` y ${hours} h` : ""}` : hours ? `Vence en ${hours} h${minutes % 60 ? ` y ${minutes % 60} min` : ""}` : `Vence en ${minutes} min`;
+}
+
 export function SolicitudesPage() {
-  const { get, patch } = useApi();
+  const { get, post, patch } = useApi();
   const { fetchWithCache, invalidate } = useDataCache();
   const toast = useToast();
   const [rows, setRows] = useState<Solicitud[]>([]);
@@ -38,6 +51,7 @@ export function SolicitudesPage() {
   const [resolveTarget, setResolveTarget] = useState<Solicitud | null>(null);
   const [resolveDecision, setResolveDecision] = useState<"aprobada" | "rechazada">("aprobada");
   const [resolveReason, setResolveReason] = useState("");
+  const [now, setNow] = useState(() => Date.now());
 
   const loadData = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -48,6 +62,7 @@ export function SolicitudesPage() {
         { ttlMs: filter === "pendiente" ? 60 * 1000 : 5 * 60 * 1000, force: options?.force },
       );
       setRows(payload.data.data);
+      setNow(Date.now());
     } finally {
       if (!options?.silent) setLoading(false);
     }
@@ -61,10 +76,22 @@ export function SolicitudesPage() {
   useEffect(() => {
     if (filter !== "pendiente") return;
     const timer = window.setInterval(() => {
+      setNow(Date.now());
       void loadData({ force: true, silent: true });
     }, 60 * 1000);
     return () => window.clearInterval(timer);
   }, [filter, loadData]);
+
+  const visibleRows = rows.filter(row => filter !== "pendiente" || pendingRequest(row, now)).sort((a, b) => filter === "pendiente" ? (requestDeadline(a) ?? Infinity) - (requestDeadline(b) ?? Infinity) : 0);
+  const nextDeadline = filter === "pendiente" ? Math.min(...visibleRows.map(requestDeadline).filter((value): value is number => value !== null)) : Infinity;
+  useEffect(() => {
+    if (!Number.isFinite(nextDeadline)) return;
+    const timer = window.setTimeout(() => {
+      setNow(Date.now());
+      void loadData({ force: true, silent: true });
+    }, Math.min(Math.max(nextDeadline - Date.now() + 50, 0), 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [nextDeadline, loadData]);
 
   function openResolveModal(row: Solicitud, decision: "aprobada" | "rechazada") {
     setResolveTarget(row);
@@ -111,7 +138,10 @@ export function SolicitudesPage() {
 
     setBusyId(resolveTarget.id);
     try {
+      const payload = { id: resolveTarget.id, decision: resolveDecision, motivoResolucion };
+      const { confirmationId } = await post<{confirmationId:string}>("/api/confirmaciones", { action:"resolver_solicitud", payload, acepta:true });
       await patch(`/api/faltas/solicitudes/${resolveTarget.id}/resolver`, {
+        confirmationId,
         decision: resolveDecision,
         motivoResolucion,
       });
@@ -122,7 +152,9 @@ export function SolicitudesPage() {
       toast.success(
         resolveDecision === "aprobada" ? "Solicitud aprobada" : "Solicitud rechazada",
       );
-      closeResolveModal();
+      setResolveModalOpen(false);
+      setResolveTarget(null);
+      setResolveReason("");
       await loadData({ force: true });
     } catch (error) {
       toast.error("Error", getApiErrorMessage(error));
@@ -136,8 +168,8 @@ export function SolicitudesPage() {
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes para Dejar sin Efecto</h3>
-            <p className="text-sm text-[var(--navy-500)]">Bandeja departamental para resolver solicitudes sobre sanciones disciplinarias.</p>
+            <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de cancelación</h3>
+            <p className="text-sm text-[var(--navy-500)]">{filter === "pendiente" ? "Se muestran primero las solicitudes próximas a vencer." : "Consulta de solicitudes resueltas."}</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => { void loadData({ force: true }); }} loading={loading}>
             Actualizar
@@ -150,7 +182,7 @@ export function SolicitudesPage() {
                 onClick={() => setFilter(status)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filter === status ? "bg-white shadow-sm text-[var(--navy-900)]" : "text-[var(--navy-500)]"}`}
               >
-                {status}
+                {{pendiente:"Pendientes",aprobada:"Aprobadas",rechazada:"Rechazadas"}[status]}
               </button>
             ))}
           </div>
@@ -158,7 +190,7 @@ export function SolicitudesPage() {
 
         {loading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <EmptyState title="Sin solicitudes" description="No existen solicitudes para este estado." />
         ) : (
           <div className="overflow-auto rounded-xl border border-[var(--border)]">
@@ -170,18 +202,25 @@ export function SolicitudesPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Unidad</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Motivo Solicitud</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Estado</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">{filter === "pendiente" ? "Tiempo para resolver" : "Resolución"}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--navy-500)] uppercase">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {rows.map((row) => (
+                {visibleRows.map((row) => (
                   <tr key={row.id}>
-                    <td className="px-4 py-3 text-[var(--navy-700)]">{row.createdAt?.slice(0, 10) ?? "-"}</td>
+                    <td className="px-4 py-3 text-[var(--navy-700)]">{row.createdAt ? boliviaDateTime(row.createdAt) : "-"}</td>
                     <td className="px-4 py-3 text-[var(--navy-900)] font-medium">{row.faltaResumen?.nombreCompleto ?? "-"} ({row.faltaResumen?.ci ?? "-"})</td>
                     <td className="px-4 py-3 text-[var(--navy-700)]">{row.solicitanteUnidadNombre ?? "-"}</td>
                     <td className="px-4 py-3 text-[var(--navy-700)] max-w-[350px]">{row.motivo}</td>
                     <td className="px-4 py-3">
                       <Badge variant={row.estado === "pendiente" ? "warning" : row.estado === "aprobada" ? "success" : "default"}>{row.estado}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.estado === "pendiente" ? <>
+                        <p className={requestDeadline(row) !== null && requestDeadline(row)! - now <= 86_400_000 ? "font-semibold text-red-700" : "font-medium text-[var(--navy-800)]"}>{remainingTime(row, now)}</p>
+                        {row.expiresAt && <p className="text-xs text-[var(--navy-500)]">Vence el {boliviaDateTime(row.expiresAt)}</p>}
+                      </> : <span className="text-xs">{row.resolvedAt ? boliviaDateTime(row.resolvedAt) : "-"}</span>}
                     </td>
                     <td className="px-4 py-3">
                         {row.estado === "pendiente" ? (

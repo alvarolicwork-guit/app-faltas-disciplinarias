@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/primitives";
 import { useAuth, isGlobalRole, isSuperAdmin } from "@/hooks/use-auth";
 import { canRegisterFalta } from "@/lib/domain/roles";
 
-export type ModuleKey = "dashboard" | "registro" | "personal" | "historial" | "usuarios" | "unidades" | "importacion" | "reportes" | "transferencias" | "solicitudes";
+export type ModuleKey = "dashboard" | "registro" | "personal" | "historial" | "usuarios" | "unidades" | "importacion" | "reportes" | "transferencias" | "solicitudes" | "auditoria";
 
 type SidebarProps = {
   activeModule: ModuleKey;
@@ -30,7 +30,7 @@ const navItems: NavItem[] = [
   { key: "unidades", label: "Unidades", icon: Icons.building, requiredRole: isGlobalRole },
   { key: "importacion", label: "Importar Personal", icon: Icons.importar, requiredRole: isGlobalRole },
   { key: "reportes", label: "Reportes", icon: Icons.reportes },
-  { key: "transferencias", label: "Auditoría Traspasos", icon: Icons.historial, requiredRole: isGlobalRole },
+  { key: "auditoria", label: "Auditoría", icon: Icons.historial, requiredRole: isSuperAdmin },
   { key: "solicitudes", label: "Dejar sin Efecto", icon: Icons.alertTriangle, requiredRole: isGlobalRole },
 ];
 

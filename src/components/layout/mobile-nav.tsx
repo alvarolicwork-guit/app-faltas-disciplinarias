@@ -1,7 +1,7 @@
 "use client";
 
 import { Icons } from "@/components/ui/icons";
-import { useAuth, isGlobalRole } from "@/hooks/use-auth";
+import { useAuth, isGlobalRole, isSuperAdmin } from "@/hooks/use-auth";
 import { canRegisterFalta } from "@/lib/domain/roles";
 import type { ModuleKey } from "./sidebar";
 
@@ -26,7 +26,7 @@ const tabs: NavTab[] = [
   { key: "usuarios", label: "Usuarios", icon: Icons.usuarios, requiresGlobal: true },
   { key: "unidades", label: "Unidades", icon: Icons.building, requiresGlobal: true },
   { key: "reportes", label: "Reportes", icon: Icons.reportes },
-  { key: "transferencias", label: "Traspasos", icon: Icons.historial, requiresGlobal: true },
+  { key: "auditoria", label: "Auditoría", icon: Icons.historial, requiredRole: isSuperAdmin },
   { key: "solicitudes", label: "Sin efecto", icon: Icons.alertTriangle, requiresGlobal: true },
 ];
 

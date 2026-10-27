@@ -1,35 +1,31 @@
+import { annotateSanctions } from "@/lib/server/chain-views";
+import { ChainError, matchesDecision, newChainMetadata, snapshotChain } from "@/lib/domain/recurrence-chain";
+import { assertDecisionAvailable, conductForInput, evaluateInTransaction, publicDecision } from "@/lib/server/recurrence";
+import { canRequestCancellation, authorUid, cancellationDeadline } from "@/lib/domain/sanction-policy";
+import { DISCIPLINARY_CATALOG } from "@/lib/domain/disciplinary-catalog";
+import { cancelDirectly } from "@/lib/server/cancellations";
+import { assertCurrentActor, readConfirmation, operationError, OperationError } from "@/lib/server/operations";
 import { DocumentData, Query, Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
 import {
   USER_ROLES_CAN_REGISTER_FALTA,
-  USER_ROLES_GLOBAL,
   USER_ROLES_UNIT_SCOPE,
 } from "@/lib/domain/constants";
 import { canRegisterHistoricalFalta, canViewGlobalPersonHistory } from "@/lib/domain/roles";
 import {
   articleNumber,
-  canEscalateFromArticulo,
-  getArticulosBaseForSancionEscalada,
-  getSancionSugeridaForFaltaBase,
-  getTerminalSancionArt12,
   incisoNumber,
-  isDirectReincidenciaControlSubject,
   isRegimenDisciplinarioReferral,
   isReincidenciaEscalada,
-  isReincidenciaOrigenMatch,
-  isSameTipificacion,
   sameArticulo,
-  type SancionSugerida,
 } from "@/lib/domain/disciplinary-recidivism";
 import {
   createFaltaSchema,
   listFaltasSearchSchema,
 } from "@/lib/domain/schemas";
 import {
-  buildReincidenciaWindow,
-  formatReincidenciaMessage,
   parseFechaSancion,
 } from "@/lib/faltas/reincidencia";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -69,33 +65,6 @@ function buildReferenciaFromFalta(faltaId: string, falta: DocumentData) {
   };
 }
 
-function buildBlockedResponsePayload(params: {
-  faltaReferenciaId: string;
-  faltaReferencia: DocumentData;
-  articuloBase: string;
-  incisoBase: string;
-  sancionSugerida: SancionSugerida | null;
-  motivoCadena?: string;
-}) {
-  const referencia = buildReferenciaFromFalta(params.faltaReferenciaId, params.faltaReferencia);
-  return {
-    sancionSugerida: params.sancionSugerida,
-    reincidenciaOrigen: {
-      articuloBase: params.articuloBase,
-      incisoBase: params.incisoBase,
-      faltaReferenciaId: params.faltaReferenciaId,
-      fechaSancionReferencia: referencia.fechaSancion,
-      memorandumReferencia: referencia.memorandum,
-      unidadReferenciaNombre: referencia.unidadNombre,
-      origenReincidenciaPrevia: params.faltaReferencia.reincidenciaOrigen ?? null,
-    },
-    referencia,
-    motivoCadena: params.motivoCadena ?? null,
-    requiereRemisionDisciplinaria: params.sancionSugerida?.requiereRemisionDisciplinaria ?? false,
-    remisionMensaje: params.sancionSugerida?.remisionMensaje ?? null,
-  };
-}
-
 function serializeReincidenciaOrigen(value: unknown): unknown {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
@@ -128,6 +97,10 @@ export async function POST(request: NextRequest) {
     }
 
     const input = parsed.data;
+    const validArticle = DISCIPLINARY_CATALOG.find((a) => sameArticulo(a.label, input.articulo));
+    if (!validArticle || !validArticle.incisos.some((i) => incisoNumber(i) === incisoNumber(input.inciso))) return badRequest("Artículo/inciso fuera del catálogo");
+    input.articulo = validArticle.label;
+    input.inciso = validArticle.incisos.find((i) => incisoNumber(i) === incisoNumber(input.inciso))!;
     const userIsUnitScoped = USER_ROLES_UNIT_SCOPE.has(actor.role);
     const modoRegistro = input.modoRegistro ?? "actual";
     const isHistoricalRegistration = modoRegistro === "historico";
@@ -156,6 +129,11 @@ export async function POST(request: NextRequest) {
     const auditRef = adminDb.collection("audit_logs").doc();
 
     const result = await adminDb.runTransaction(async (tx) => {
+      await assertCurrentActor(tx, adminDb, actor);
+      const confirmation = await readConfirmation(tx, adminDb, actor, body.confirmationId, "registrar_sancion", body.payloadConfirmado);
+      // Hash the actual normalized business payload, never a parallel client claim.
+      if (JSON.stringify(createFaltaSchema.parse(body.payloadConfirmado)) !== JSON.stringify(createFaltaSchema.parse(body))) throw new OperationError("Los datos cambiaron desde su confirmación", 400);
+      if (confirmation.data.result) return { blocked: false as const, faltaId: String(confirmation.data.result.faltaId) };
       const personalSnap = await tx.get(personalRef);
 
       if (!personalSnap.exists) {
@@ -164,23 +142,22 @@ export async function POST(request: NextRequest) {
 
       const personal = personalSnap.data()!;
 
-      if (userIsUnitScoped && personal.unidadId !== actor.unidadId) {
-        throw new Error("PERSONAL_OUTSIDE_UNIT");
-      }
+
 
       const fechaSancion = parseFechaSancion(input.fechaSancion);
       const fechaSancionTs = Timestamp.fromDate(fechaSancion);
-      const window = buildReincidenciaWindow(input.fechaSancion);
+
       const unidadSancionId = safeString(userIsUnitScoped ? actor.unidadId : input.unidadId).trim();
       const isSancionEscalada = isReincidenciaEscalada(input.articulo, input.inciso);
 
-      let unidadSancionNombre = safeString(userIsUnitScoped ? actor.unidadNombre : "").trim();
-      if (!unidadSancionNombre) {
+      let unidadSancionNombre = "";
+      {
         const unidadSancionSnap = await tx.get(adminDb.collection("unidades").doc(unidadSancionId));
         if (!unidadSancionSnap.exists) {
           throw new Error("UNIDAD_DATA_MISSING");
         }
         const unidadSancion = unidadSancionSnap.data()!;
+        if (unidadSancion.estado !== "activa") throw new OperationError("La unidad sancionadora no está activa", 403);
         unidadSancionNombre = safeString(unidadSancion.nombre).trim();
       }
 
@@ -192,274 +169,50 @@ export async function POST(request: NextRequest) {
         throw new Error("PERSONAL_DATA_INCOMPLETE");
       }
 
-      const personalUnidadId = safeString(personal.unidadId).trim();
-      const personalUnidadNombre = safeString(personal.unidadNombre).trim();
       const personalCi = safeString(personal.ci).trim();
       const personalNombreCompleto = safeString(personal.nombreCompleto).trim();
       const personalGrado = safeString(personal.grado).trim();
 
-      if (!personalUnidadId || !personalUnidadNombre || !personalCi || !personalNombreCompleto || !personalGrado) {
+      if (!personalCi || !personalNombreCompleto || !personalGrado) {
         throw new Error("PERSONAL_DATA_INCOMPLETE");
       }
 
-      let unidadEfectivoId = personalUnidadId;
-      let unidadEfectivoNombre = personalUnidadNombre;
-
-      if (isHistoricalRegistration) {
-        unidadEfectivoId = safeString(input.unidadEfectivoHistoricaId).trim();
-        if (!unidadEfectivoId) {
-          throw new Error("HISTORICAL_UNIT_REQUIRED");
-        }
-
-        const unidadHistoricaSnap = await tx.get(adminDb.collection("unidades").doc(unidadEfectivoId));
-        if (!unidadHistoricaSnap.exists) {
-          throw new Error("HISTORICAL_UNIT_NOT_FOUND");
-        }
-        const unidadHistorica = unidadHistoricaSnap.data()!;
-        unidadEfectivoNombre = safeString(unidadHistorica.nombre).trim();
-        if (!unidadEfectivoNombre) {
-          throw new Error("HISTORICAL_UNIT_NOT_FOUND");
-        }
-      }
+      const unidadEfectivoId = null;
+      const unidadEfectivoNombre = null;
 
       let reincidenciaOrigen: Record<string, unknown> | null = null;
 
-      if (isSancionEscalada) {
-        if (!input.reincidenciaOrigen) {
-          throw new Error("REINCIDENCIA_ORIGIN_REQUIRED");
-        }
-
-        const articulosBaseEsperados = getArticulosBaseForSancionEscalada(input.articulo, input.inciso);
-        if (!articulosBaseEsperados.some((articuloBase) => sameArticulo(input.reincidenciaOrigen!.articuloBase, articuloBase))) {
-          throw new Error("REINCIDENCIA_ORIGIN_ARTICLE_INVALID");
-        }
-
-        const origenRef = adminDb.collection("faltas").doc(input.reincidenciaOrigen.faltaReferenciaId);
-        const origenSnap = await tx.get(origenRef);
-        if (!origenSnap.exists) {
-          throw new Error("REINCIDENCIA_ORIGIN_NOT_FOUND");
-        }
-
-        const origen = origenSnap.data()!;
-        if (origen.estado !== "registrada") {
-          throw new Error("REINCIDENCIA_ORIGIN_INVALID");
-        }
-
-        if (origen.personalId !== input.personalId) {
-          throw new Error("REINCIDENCIA_ORIGIN_PERSONAL_MISMATCH");
-        }
-
-        if (!sameArticulo(safeString(origen.articulo), input.reincidenciaOrigen.articuloBase)) {
-          throw new Error("REINCIDENCIA_ORIGIN_ARTICLE_INVALID");
-        }
-
-        if (safeString(origen.inciso) !== input.reincidenciaOrigen.incisoBase) {
-          throw new Error("REINCIDENCIA_ORIGIN_INCISO_INVALID");
-        }
-
-        const origenFecha = origen.fechaSancion as Timestamp | undefined;
-        if (!origenFecha || origenFecha.toMillis() < window.start.toMillis() || origenFecha.toMillis() > window.end.toMillis()) {
-          throw new Error("REINCIDENCIA_ORIGIN_OUT_OF_WINDOW");
-        }
-
-        reincidenciaOrigen = {
-          articuloBase: safeString(origen.articulo),
-          incisoBase: safeString(origen.inciso),
-          faltaReferenciaId: origenSnap.id,
-          fechaSancionReferencia: origen.fechaSancion ?? null,
-          memorandumReferencia: origen.memorandum ?? null,
-          unidadReferenciaNombre: origen.unidadSancionNombre ?? origen.unidadNombre ?? null,
-          origenReincidenciaPrevia: origen.reincidenciaOrigen ?? null,
-        };
-
-        const duplicateEscaladaQuery = adminDb
-          .collection("faltas")
-          .where("personalId", "==", input.personalId)
-          .where("estado", "==", "registrada")
-          .where("fechaSancion", ">=", window.start)
-          .where("fechaSancion", "<=", window.end)
-          .orderBy("fechaSancion", "desc")
-          .limit(100);
-
-        const duplicateEscaladaSnap = await tx.get(duplicateEscaladaQuery);
-        const duplicateEscalada = duplicateEscaladaSnap.docs.find((doc) => {
-          const item = doc.data();
-          return (
-            isSameTipificacion(safeString(item.articulo), safeString(item.inciso), input.articulo, input.inciso) &&
-            isReincidenciaOrigenMatch(item.reincidenciaOrigen, safeString(origen.articulo), safeString(origen.inciso))
-          );
-        });
-
-        if (duplicateEscalada) {
-          const previousEscalada = duplicateEscalada.data();
-          const previousEscaladaArticle = articleNumber(safeString(previousEscalada.articulo));
-          const sancionSugerida = previousEscaladaArticle === 12
-            ? getTerminalSancionArt12()
-            : previousEscaladaArticle
-              ? getSancionSugeridaForFaltaBase(safeString(previousEscalada.articulo))
-              : null;
-
-          if (sancionSugerida) {
-            return {
-              blocked: true as const,
-              reincidenciaBloqueadaId: null,
-              ...buildBlockedResponsePayload({
-                faltaReferenciaId: duplicateEscalada.id,
-                faltaReferencia: previousEscalada,
-                articuloBase: safeString(previousEscalada.articulo),
-                incisoBase: safeString(previousEscalada.inciso),
-                sancionSugerida,
-                motivoCadena: "Ya existe una sancion escalada previa para el mismo origen de reincidencia.",
-              }),
-            };
-          }
-        }
-      }
-
-      if (!isSancionEscalada && canEscalateFromArticulo(input.articulo) && isDirectReincidenciaControlSubject(input.articulo, input.inciso)) {
-        const reincidenciaQuery = adminDb
-          .collection("faltas")
-          .where("personalId", "==", input.personalId)
-          .where("articulo", "==", input.articulo)
-          .where("inciso", "==", input.inciso)
-          .where("estado", "==", "registrada")
-          .where("fechaSancion", ">=", window.start)
-          .where("fechaSancion", "<=", window.end)
-          .orderBy("fechaSancion", "asc")
-          .limit(1);
-
-        const reincidenciaSnap = await tx.get(reincidenciaQuery);
-
-        if (!reincidenciaSnap.empty) {
-        const previa = reincidenciaSnap.docs[0].data();
-        const previaId = reincidenciaSnap.docs[0].id;
-
-        const escaladasQuery = adminDb
-          .collection("faltas")
-          .where("personalId", "==", input.personalId)
-          .where("estado", "==", "registrada")
-          .where("fechaSancion", ">=", window.start)
-          .where("fechaSancion", "<=", window.end)
-          .orderBy("fechaSancion", "desc")
-          .limit(100);
-        const escaladasSnap = await tx.get(escaladasQuery);
-        const escaladasMismoOrigen = escaladasSnap.docs
-          .map((doc) => ({ id: doc.id, data: doc.data() }))
-          .filter(({ data }) => isReincidenciaOrigenMatch(data.reincidenciaOrigen, input.articulo, input.inciso));
-
-        const existingArt12Escalada = escaladasMismoOrigen.find(({ data }) => articleNumber(safeString(data.articulo)) === 12 && incisoNumber(safeString(data.inciso)) === 1);
-        const existingArt11Escalada = escaladasMismoOrigen.find(({ data }) => articleNumber(safeString(data.articulo)) === 11 && incisoNumber(safeString(data.inciso)) === 1);
-        const existingArt10Escalada = escaladasMismoOrigen.find(({ data }) => articleNumber(safeString(data.articulo)) === 10 && incisoNumber(safeString(data.inciso)) === 1);
-
-        let sancionSugerida = getSancionSugeridaForFaltaBase(input.articulo);
-        let referencia = buildReferenciaFromFalta(previaId, previa);
-        let fechaSancionReferenciaRaw = previa.fechaSancion ?? null;
-        let motivoCadena = "Se identifico una reincidencia directa dentro del periodo de un ano.";
-        let reincidenciaOrigenPropuesta = {
-          articuloBase: input.articulo,
-          incisoBase: input.inciso,
-          faltaReferenciaId: previaId,
-        };
-
-        if (existingArt12Escalada) {
-          sancionSugerida = getTerminalSancionArt12();
-          referencia = buildReferenciaFromFalta(existingArt12Escalada.id, existingArt12Escalada.data);
-          fechaSancionReferenciaRaw = existingArt12Escalada.data.fechaSancion ?? null;
-          motivoCadena = "La cadena de reincidencia ya alcanzo el Art. 12 inc. 1 para este mismo origen.";
-          reincidenciaOrigenPropuesta = {
-            articuloBase: safeString(existingArt12Escalada.data.articulo),
-            incisoBase: safeString(existingArt12Escalada.data.inciso),
-            faltaReferenciaId: existingArt12Escalada.id,
-          };
-        } else if (existingArt11Escalada) {
-          sancionSugerida = getSancionSugeridaForFaltaBase(safeString(existingArt11Escalada.data.articulo));
-          referencia = buildReferenciaFromFalta(existingArt11Escalada.id, existingArt11Escalada.data);
-          fechaSancionReferenciaRaw = existingArt11Escalada.data.fechaSancion ?? null;
-          motivoCadena = "Ya existe una reincidencia previa sancionada como Art. 11 inc. 1 para este mismo origen.";
-          reincidenciaOrigenPropuesta = {
-            articuloBase: safeString(existingArt11Escalada.data.articulo),
-            incisoBase: safeString(existingArt11Escalada.data.inciso),
-            faltaReferenciaId: existingArt11Escalada.id,
-          };
-        } else if (existingArt10Escalada) {
-          sancionSugerida = getSancionSugeridaForFaltaBase(safeString(existingArt10Escalada.data.articulo));
-          referencia = buildReferenciaFromFalta(existingArt10Escalada.id, existingArt10Escalada.data);
-          fechaSancionReferenciaRaw = existingArt10Escalada.data.fechaSancion ?? null;
-          motivoCadena = "Ya existe una reincidencia previa sancionada como Art. 10 inc. 1 para este mismo origen.";
-          reincidenciaOrigenPropuesta = {
-            articuloBase: safeString(existingArt10Escalada.data.articulo),
-            incisoBase: safeString(existingArt10Escalada.data.inciso),
-            faltaReferenciaId: existingArt10Escalada.id,
-          };
-        }
-
-        const now = Timestamp.now();
-        const blockedPayload = {
-          personalId: input.personalId,
-          ci: personalCi,
-          nombreCompleto: personalNombreCompleto,
-          grado: personalGrado,
-          unidadIntentoId: unidadSancionId,
-          unidadIntentoNombre: unidadSancionNombre,
-          unidadEfectivoId,
-          unidadEfectivoNombre,
-          articuloIntentado: input.articulo,
-          incisoIntentado: input.inciso,
-          fechaSancionIntentada: fechaSancionTs,
-          memorandumIntentado: input.memorandum,
-          motivoIntentado: input.motivo,
-          faltaReferenciaId: reincidenciaOrigenPropuesta.faltaReferenciaId,
-          fechaSancionReferencia: fechaSancionReferenciaRaw,
-          memorandumReferencia: referencia.memorandum ?? null,
-          unidadReferenciaNombre: referencia.unidadNombre ?? null,
-          sancionSugerida,
-          reincidenciaOrigenPropuesta,
-          requiereRemisionDisciplinaria: sancionSugerida?.requiereRemisionDisciplinaria ?? false,
-          remisionMensaje: sancionSugerida?.remisionMensaje ?? null,
-          motivoCadena,
-          actor: {
-            uid: actor.uid,
-            email: actor.email,
-            role: actor.role,
-          },
-          estado: "bloqueada",
-          motivoBloqueo: "misma_tipificacion_365_dias",
-          createdAt: now,
-        };
-
+      const allSnap = await tx.get(adminDb.collection("faltas").where("personalId", "==", input.personalId));
+      const conduct = conductForInput(allSnap.docs.map(d => ({ ...d.data(), id: d.id })), input);
+      const evaluation = await evaluateInTransaction(tx, adminDb, input.personalId, input.fechaSancion, conduct.articulo, conduct.inciso);
+      const { decision, bloqueo, decisionVersion } = evaluation;
+      if (input.decisionVersion && input.decisionVersion !== decisionVersion) throw new OperationError("Los antecedentes cambiaron. Revise y confirme la evaluación actualizada");
+      assertDecisionAvailable(bloqueo);
+      if (!matchesDecision(input.articulo, input.inciso, input.reincidenciaOrigen?.faltaReferenciaId ?? null, decision)) {
+        const referenceRow = decision.nodes.at(-1);
+        const proposal = publicDecision(decision, bloqueo, decisionVersion);
+        const blockedPayload = { personalId: input.personalId, unidadIntentoId: unidadSancionId, unidadIntentoNombre: unidadSancionNombre,
+          articuloIntentado: input.articulo, incisoIntentado: input.inciso, conductaOrigen: conduct,
+          fechaSancionIntentada: fechaSancionTs, estado: "bloqueada", actor: { uid: actor.uid, role: actor.role },
+          motivoBloqueo: "decision_cadena", sancionSugerida: decision.sancion, createdAt: Timestamp.now() };
         tx.set(reincidenciaBloqueadaRef, blockedPayload);
-        tx.set(auditRef, {
-          actorUid: actor.uid,
-          actorEmail: actor.email,
-          actorRole: actor.role,
-          action: "block_reincidencia",
-          entity: "reincidencia_bloqueada",
-          entityId: reincidenciaBloqueadaRef.id,
-          unidadId: unidadSancionId,
-          before: null,
-          after: blockedPayload,
-          createdAt: now,
-        });
-
-        return {
-          blocked: true as const,
-          reincidenciaBloqueadaId: reincidenciaBloqueadaRef.id,
-          sancionSugerida,
-          reincidenciaOrigen: {
-            ...reincidenciaOrigenPropuesta,
-            fechaSancionReferencia: referencia.fechaSancion,
-            memorandumReferencia: referencia.memorandum,
-            unidadReferenciaNombre: referencia.unidadNombre,
-          },
-          referencia,
-          motivoCadena,
-          requiereRemisionDisciplinaria: sancionSugerida?.requiereRemisionDisciplinaria ?? false,
-          remisionMensaje: sancionSugerida?.remisionMensaje ?? null,
-        };
+        tx.set(auditRef, { actorUid: actor.uid, actorRole: actor.role, action: "block_reincidencia", entity: "reincidencia_bloqueada",
+          entityId: reincidenciaBloqueadaRef.id, unidadId: unidadSancionId, before: null, after: blockedPayload, createdAt: Timestamp.now() });
+        return { blocked: true as const, reincidenciaBloqueadaId: reincidenciaBloqueadaRef.id,
+          sancionSugerida: decision.sancion, reincidenciaOrigen: proposal.reincidenciaOrigen,
+          referencia: referenceRow ? buildReferenciaFromFalta(referenceRow.id, referenceRow) : null,
+          motivoCadena: decision.tipo === "base" ? "La cadena anterior venció o no existe fundamento vigente. Corresponde registrar una nueva sanción base." : "La sanción debe corresponder al último escalón de esta conducta y su cadena vigente.",
+          requiereRemisionDisciplinaria: decision.tipo === "remision", remisionMensaje: decision.sancion.remisionMensaje ?? null };
       }
-      }
+      reincidenciaOrigen = snapshotChain(decision.nodes);
+      const chainMetadata = decision.metadata ?? newChainMetadata(faltaRef.id, conduct, input.fechaSancion);
 
+      tx.set(personalRef, { workflowUpdatedAt: Timestamp.now() }, { merge: true });
       const faltaPayload = {
+        ...(evaluation.skipRegistrationWait ? {pruebaLocalSinEspera:true} : {}),
+        confirmacion: { id: confirmation.ref.id, textoVersion: "intencion-v1", fecha: Timestamp.now(), hash: confirmation.data.hash, actorUid: actor.uid },
+        ...chainMetadata,
+        fundamentoOriginal: { ...chainMetadata, articulo: input.articulo, inciso: input.inciso, reincidenciaOrigen },
         personalId: input.personalId,
         unidadId: unidadSancionId,
         unidadNombre: unidadSancionNombre,
@@ -478,8 +231,8 @@ export async function POST(request: NextRequest) {
         tipoRegistro: isSancionEscalada ? "reincidencia_escalada" : "falta_directa",
         modoRegistro,
         cargaHistorica: isHistoricalRegistration,
-        unidadActualEfectivoId: personalUnidadId,
-        unidadActualEfectivoNombre: personalUnidadNombre,
+        unidadActualEfectivoId: null,
+        unidadActualEfectivoNombre: null,
         reincidencia: isSancionEscalada,
         reincidenciaReferencia: reincidenciaOrigen,
         reincidenciaOrigen,
@@ -503,6 +256,7 @@ export async function POST(request: NextRequest) {
       };
 
       tx.set(faltaRef, faltaPayload);
+      tx.update(confirmation.ref, { result: { faltaId: faltaRef.id }, consumedAt: Timestamp.now() });
       tx.set(auditRef, {
         actorUid: actor.uid,
         actorEmail: actor.email,
@@ -529,7 +283,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "REINCIDENCIA_BLOCKED",
-          message: formatReincidenciaMessage(),
+          message: result.motivoCadena,
           reincidenciaBloqueadaId: result.reincidenciaBloqueadaId,
           sancionSugerida: result.sancionSugerida,
           reincidenciaOrigen: result.reincidenciaOrigen,
@@ -555,6 +309,7 @@ export async function POST(request: NextRequest) {
       message: error instanceof Error ? error.message : "unknown_error",
     });
 
+    if (error instanceof OperationError || error instanceof ChainError) return operationError(error);
     if (error instanceof Error) {
       if (error.message === "PERSONAL_NOT_FOUND") {
         return badRequest("No se encontro personalId en la coleccion personal");
@@ -659,7 +414,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const scopedUnidadId = isGlobalPersonScope ? "" : (userIsUnitScoped && !personalId ? actor.unidadId : unidadId);
+    const scopedUnidadId = isGlobalPersonScope ? "" : (userIsUnitScoped ? actor.unidadId : unidadId);
+    if (personalId && !scopedUnidadId && !canViewGlobalPersonHistory(actor.role)) {
+      return forbidden("Seleccione una unidad para consultar este historial; para registrar use la consulta de antecedentes");
+    }
 
     if (personalId) {
       query = query.where("personalId", "==", personalId);
@@ -669,13 +427,6 @@ export async function GET(request: NextRequest) {
       query = query.where("unidadId", "==", scopedUnidadId);
     }
 
-    if (articulo) {
-      query = query.where("articulo", "==", articulo);
-    }
-
-    if (inciso) {
-      query = query.where("inciso", "==", inciso);
-    }
 
     if (reincidencia) {
       query = query.where("reincidencia", "==", reincidencia === "true");
@@ -703,16 +454,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    query = query.orderBy("fechaSancion", "desc").limit(100);
+    query = query.orderBy("fechaSancion", "desc");
 
     const snap = await query.get();
     const textFilter = q?.trim().toLowerCase() ?? "";
 
-    const rows: Array<Record<string, unknown> & { id: string }> = snap.docs.map((doc) => {
-        const item = doc.data();
+    const annotated = await annotateSanctions(adminDb, snap.docs.map(d=>({...d.data(),id:d.id})));
+    const rows: Array<Record<string, unknown> & { id: string }> = annotated.map((item) => {
         return {
-          id: doc.id,
         ...item,
+        puedeSolicitarCancelacion: canRequestCancellation(actor, item, Date.now()),
+        puedeCancelarDirectamente: item.estado === "registrada" && (actor.role === "super_admin" || (actor.role === "admin_dpto" && authorUid(item) === actor.uid && cancellationDeadline(item) !== null && Date.now() < cancellationDeadline(item)!)),
         unidadSancionNombre: item.unidadSancionNombre ?? item.unidadNombre ?? null,
         reincidenciaOrigen: serializeReincidenciaOrigen(item.reincidenciaOrigen),
         fechaSancion: item.fechaSancion?.toDate?.()?.toISOString()?.slice(0, 10) ?? null,
@@ -722,6 +474,8 @@ export async function GET(request: NextRequest) {
     });
 
     const data = rows.filter((row) => {
+        if (articulo && !sameArticulo(safeString(row.articulo), articulo)) return false;
+        if (inciso && incisoNumber(safeString(row.inciso)) !== incisoNumber(inciso)) return false;
         if (!textFilter) {
           return true;
         }
@@ -763,83 +517,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return unauthorized();
-    if (!USER_ROLES_GLOBAL.has(actor.role)) {
-      return forbidden("Solo admin_dpto o super_admin pueden dejar sin efecto sanciones");
-    }
-
-    const faltaId = request.nextUrl.searchParams.get("id")?.trim();
-    const solicitudId = request.nextUrl.searchParams.get("solicitudId")?.trim();
-    const motivoEliminacion = request.nextUrl.searchParams.get("motivo")?.trim();
-
-    if (!faltaId) return badRequest("id de falta requerido");
-    if (!motivoEliminacion || motivoEliminacion.length < 6) {
-      return badRequest("motivo para dejar sin efecto requerido (mínimo 6 caracteres)");
-    }
-
-    const adminDb = getAdminDb();
-    const faltaRef = adminDb.collection("faltas").doc(faltaId);
-    const auditRef = adminDb.collection("audit_logs").doc();
-
-    const result = await adminDb.runTransaction(async (tx) => {
-      const faltaSnap = await tx.get(faltaRef);
-      if (!faltaSnap.exists) throw new Error("FALTA_NOT_FOUND");
-
-      const before = faltaSnap.data()!;
-      if (before.estado === "anulada") {
-        throw new Error("FALTA_ALREADY_ANULADA");
-      }
-
-      const now = Timestamp.now();
-      const after = {
-        ...before,
-        estado: "anulada",
-        anulacion: {
-          motivoEliminacion,
-          solicitudId: solicitudId ?? null,
-          anuladaPor: {
-            uid: actor.uid,
-            email: actor.email,
-            role: actor.role,
-          },
-          fecha: now,
-        },
-        updatedAt: now,
-        updatedBy: {
-          uid: actor.uid,
-          email: actor.email,
-          role: actor.role,
-        },
-      };
-
-      tx.update(faltaRef, {
-        estado: "anulada",
-        anulacion: after.anulacion,
-        updatedAt: now,
-        updatedBy: after.updatedBy,
-      });
-
-      tx.set(auditRef, {
-        actorUid: actor.uid,
-        actorEmail: actor.email,
-        actorRole: actor.role,
-        action: "annul_falta",
-        entity: "falta",
-        entityId: faltaId,
-        unidadId: before.unidadId ?? null,
-        before,
-        after,
-        createdAt: now,
-      });
-
-      return { ok: true };
-    });
-
-    return NextResponse.json(result, { status: 200 });
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "FALTA_NOT_FOUND") return badRequest("Falta no encontrada");
-      if (error.message === "FALTA_ALREADY_ANULADA") return badRequest("La falta ya está anulada");
-    }
-    return NextResponse.json({ error: "No se pudo dejar sin efecto la falta" }, { status: 500 });
-  }
+    const body = await request.json();
+    return NextResponse.json(await cancelDirectly(actor, body.payload, body.confirmationId));
+  } catch (error) { return operationError(error); }
 }

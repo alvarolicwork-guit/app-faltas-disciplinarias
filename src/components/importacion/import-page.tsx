@@ -1,4 +1,5 @@
 "use client";
+import { parseDelimited, escapeHtml } from "@/lib/domain/delimited";
 
 import { useCallback, useState } from "react";
 import { Icons } from "@/components/ui/icons";
@@ -30,7 +31,7 @@ type CsvParseResult = {
   preview: string[][];
 };
 
-const EXPECTED_HEADERS = ["ci", "grado", "nombres", "apellidos", "sexo", "codigo_unidad", "estado"];
+const EXPECTED_HEADERS = ["ci", "grado", "nombres", "apellidos", "sexo", "estado"];
 
 function normalizeHeader(raw: string): string {
   const cleaned = raw
@@ -46,7 +47,7 @@ function normalizeHeader(raw: string): string {
 }
 
 function splitCsvLine(line: string, delimiter: "," | ";"): string[] {
-  return line.split(delimiter).map((cell) => cell.trim());
+  return parseDelimited(line, delimiter)[0] ?? [];
 }
 
 function scoreDelimiter(headerLine: string, delimiter: "," | ";"): number {
@@ -77,28 +78,18 @@ function parseCsvAuto(text: string): CsvParseResult {
   }
 
   const delimiter = detectDelimiter(lines);
-  const rawHeaders = splitCsvLine(lines[0], delimiter);
-  const headers = rawHeaders.map(normalizeHeader);
-
-  const preview = lines.slice(0, 6).map((line) => splitCsvLine(line, delimiter));
-
-  const rows = lines.slice(1).map((line) => {
-    const cols = splitCsvLine(line, delimiter);
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      row[h] = cols[i] ?? "";
-    });
-    return row;
-  });
-
+  const parsedRows = parseDelimited(text, delimiter);
+  const headers = (parsedRows[0] ?? []).map(normalizeHeader);
+  const preview = parsedRows.slice(0, 6);
+  const rows = parsedRows.slice(1).map(cols => Object.fromEntries(headers.map((h,i)=>[h,cols[i]??""])));
   return { delimiter, headers, rows, preview };
 }
 
 export function ImportPage() {
-  const { post, apiFetch } = useApi();
+  const { post } = useApi();
   const { sessionUser } = useAuth();
   const toast = useToast();
-  const { getUnitName, unitOptions } = useUnidades();
+  const { getUnitName } = useUnidades();
   const [file, setFile] = useState<File | null>(null);
   const [unidadId] = useState("GLOBAL");
   const [busy, setBusy] = useState(false);
@@ -108,7 +99,6 @@ export function ImportPage() {
   const isGlobalImport = true;
   const canUseBulkImport = sessionUser ? canBulkImportPersonal(sessionUser.role) : false;
   const [creating, setCreating] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [newPersonal, setNewPersonal] = useState({
     ci: "",
     grado: "",
@@ -145,7 +135,7 @@ export function ImportPage() {
       const parsed = parseCsvAuto(text);
       setDetectedDelimiter(parsed.delimiter);
 
-      const requiredHeaders = ["ci", "grado", "nombres", "apellidos", "sexo", "codigo_unidad"];
+      const requiredHeaders = ["ci", "grado", "nombres", "apellidos", "sexo"];
       const missingHeaders = requiredHeaders.filter((header) => !parsed.headers.includes(header));
       if (missingHeaders.length > 0) {
         toast.error(
@@ -170,10 +160,7 @@ export function ImportPage() {
   }
 
   async function handleCreatePersonal() {
-    if (!newPersonal.unidadId) {
-      toast.warning("Seleccione la unidad destino");
-      return;
-    }
+
     setCreating(true);
     try {
       await post("/api/personal", {
@@ -210,10 +197,10 @@ export function ImportPage() {
       .map(
         (err) => `
           <tr>
-            <td>${err.row}</td>
-            <td>${err.field}</td>
-            <td>${err.value ?? ""}</td>
-            <td>${err.message}</td>
+            <td>${escapeHtml(err.row)}</td>
+            <td>${escapeHtml(err.field)}</td>
+            <td>${escapeHtml(err.value ?? "")}</td>
+            <td>${escapeHtml(err.message)}</td>
           </tr>
         `,
       )
@@ -261,7 +248,7 @@ export function ImportPage() {
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p class="footer">Import ID: ${result.importId ?? "N/A"}</p>
+          <p class="footer">Import ID: ${escapeHtml(result.importId ?? "N/A")}</p>
         </body>
       </html>
     `);
@@ -270,48 +257,6 @@ export function ImportPage() {
     win.print();
   }
 
-  async function handleResetImportData() {
-    const reason = window.prompt("Motivo de la eliminación masiva (mínimo 10 caracteres)");
-    if (!reason || reason.trim().length < 10) {
-      toast.warning("Debe ingresar un motivo válido de al menos 10 caracteres.");
-      return;
-    }
-
-    const confirmation = window.prompt(
-      "Esta acción eliminará TODO el personal cargado, CI registry y logs de importación. Escriba: ELIMINAR TODO",
-    );
-    if (confirmation !== "ELIMINAR TODO") {
-      toast.warning("Confirmación no válida. Operación cancelada.");
-      return;
-    }
-
-    setResetting(true);
-    try {
-      const res = await apiFetch<{ deletedPersonal: number; deletedRegistry: number; deletedImports: number }>(
-        "/api/imports/personal",
-        {
-          method: "DELETE",
-          body: JSON.stringify({
-            confirmation,
-            reason: reason.trim(),
-            scope: "personal_import_reset",
-          }),
-        },
-      );
-
-      setResult(null);
-      setPreview([]);
-      setFile(null);
-      toast.success(
-        "Base reiniciada",
-        `Personal: ${res.deletedPersonal}, CI Registry: ${res.deletedRegistry}, Importaciones: ${res.deletedImports}`,
-      );
-    } catch (err) {
-      toast.error("Error", err instanceof Error ? err.message : "No se pudo reiniciar la base");
-    } finally {
-      setResetting(false);
-    }
-  }
 
   const rangoOptions = RANGOS_POLICIALES.map((rango) => ({ value: rango, label: rango }));
 
@@ -324,10 +269,10 @@ export function ImportPage() {
         <div className="p-3 rounded-xl bg-[var(--info-50)] border border-[var(--info-100)]">
           <p className="text-sm font-medium text-[var(--navy-800)]">Modo de importación: Global departamental</p>
           <p className="text-xs text-[var(--info-600)] mt-1">
-            Cada fila debe contener exactamente estas columnas: <strong>ci</strong>, <strong>grado</strong>, <strong>nombres</strong>, <strong>apellidos</strong>, <strong>sexo</strong>, <strong>codigo_unidad</strong> y opcionalmente <strong>estado</strong>.
+            Cada fila debe contener exactamente estas columnas: <strong>ci</strong>, <strong>grado</strong>, <strong>nombres</strong>, <strong>apellidos</strong>, <strong>sexo</strong> y opcionalmente <strong>estado</strong>.
           </p>
           <p className="text-xs text-[var(--info-600)] mt-1">
-            Formato por fila: <strong>CI único</strong> (sin repetir), <strong>grado oficial del catálogo</strong>, nombres y apellidos, sexo (Masculino/Femenino), y código de unidad válido (ej: U-001).
+            Formato por fila: <strong>CI único</strong> (sin repetir), <strong>grado oficial del catálogo</strong>, nombres y apellidos, sexo (Masculino/Femenino), sin asignación a unidad.
           </p>
           <p className="text-xs text-[var(--info-700)] mt-2 font-medium">
             Ejemplo de fila CSV: <span className="font-mono">1234567,Sgto. 1ro.,Juan,Campos,Masculino,U-001,activo</span>
@@ -378,19 +323,6 @@ export function ImportPage() {
         <Button className="w-full mt-4" variant="primary" size="lg" loading={busy} disabled={!file || !unidadId} onClick={handleImport} icon={Icons.upload({ size: 18 })}>
           Importar Personal
         </Button>
-        <Button
-          className="w-full mt-3"
-          variant="outline"
-          size="md"
-          loading={resetting}
-          onClick={handleResetImportData}
-          icon={Icons.trash({ size: 16 })}
-        >
-          Eliminar Todo el Personal Cargado
-        </Button>
-        <p className="text-xs text-[var(--danger-600)] mt-2">
-          Acción restringida a super admin. Requiere confirmación explícita y motivo de auditoría.
-        </p>
         </Card>
       )}
 
@@ -410,7 +342,6 @@ export function ImportPage() {
           <Input label="Nombres" value={newPersonal.nombres} onChange={(e) => setNewPersonal((p) => ({ ...p, nombres: e.target.value }))} required />
           <Input label="Apellidos" value={newPersonal.apellidos} onChange={(e) => setNewPersonal((p) => ({ ...p, apellidos: e.target.value }))} required />
           <Select label="Sexo" value={newPersonal.sexo} onChange={(e) => setNewPersonal((p) => ({ ...p, sexo: e.target.value }))} options={[{ value: "Masculino", label: "Masculino" }, { value: "Femenino", label: "Femenino" }]} />
-          <Select label="Unidad destino" value={newPersonal.unidadId} onChange={(e) => setNewPersonal((p) => ({ ...p, unidadId: e.target.value }))} options={unitOptions} placeholder="Seleccionar unidad" required />
         </div>
         <Button className="w-full mt-4" variant="primary" loading={creating} onClick={handleCreatePersonal} icon={Icons.plus({ size: 18 })}>Registrar Efectivo</Button>
       </Card>

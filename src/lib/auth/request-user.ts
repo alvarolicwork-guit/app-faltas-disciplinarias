@@ -3,6 +3,7 @@ import { DocumentData } from "firebase-admin/firestore";
 import { NextRequest } from "next/server";
 
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { USER_ROLES } from "@/lib/domain/constants";
 
 type RequestUser = {
   uid: string;
@@ -62,7 +63,9 @@ export async function getRequestUser(request: NextRequest): Promise<RequestUser 
     return null;
   }
 
-  const decodedToken = await getAdminAuth().verifyIdToken(idToken);
+  let decodedToken: DecodedIdToken;
+  try { decodedToken = await getAdminAuth().verifyIdToken(idToken, true); }
+  catch { return null; }
   const userDoc = await getAdminDb().collection("users").doc(decodedToken.uid).get();
 
   if (!userDoc.exists) {
@@ -72,6 +75,16 @@ export async function getRequestUser(request: NextRequest): Promise<RequestUser 
   const data = userDoc.data()!;
   if (!isUserEnabled(data)) {
     return null;
+  }
+  if (data.handoverPending) return null;
+
+  if (!(USER_ROLES as readonly string[]).includes(data.role)) return null;
+  if (["admin_unidad", "operador_unidad"].includes(data.role) && !data.unidadId) return null;
+  if (data.mustChangePassword && !["/api/me", "/api/users/password-change"].includes(request.nextUrl.pathname)) return null;
+  if (data.role === "admin_unidad") {
+    const peers = await getAdminDb().collection("users").where("unidadId", "==", data.unidadId).get();
+    const active = peers.docs.filter((d) => d.data().role === "admin_unidad" && isUserEnabled(d.data()));
+    if (active.length !== 1 || active[0].id !== decodedToken.uid) return null;
   }
 
   return mapUser(decodedToken.uid, decodedToken, data);

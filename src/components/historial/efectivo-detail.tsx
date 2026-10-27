@@ -6,11 +6,20 @@ import { Badge } from "@/components/ui/primitives";
 import {
   formatArticleShort,
   formatIncisoShort,
-  formatReincidenciaOrigin,
+  formatDisciplinaryDate,
   type ReincidenciaOrigenView,
 } from "@/lib/domain/reincidencia-format";
+import { SancionesRelacionadas } from "./sanciones-relacionadas";
 
 type Falta = {
+  conductaOrigen?: {articulo:string;inciso:string};
+  cadenaId?:string;
+  fechaInicioCadena?:string;
+  fechaVencimientoCadena?:string;
+  estadoPlazoCadena?:string;
+  revisionCadena?:string|null;
+  tipificacionOriginal?: { articulo: string; inciso: string };
+  documentoRequiereRevision?: boolean;
   id: string;
   nombreCompleto: string;
   ci: string;
@@ -46,6 +55,7 @@ export function EfectivoDetail({ falta, open, onClose }: EfectivoDetailProps) {
   return (
     <Modal open={open} onClose={onClose} title="Detalle de Sanción" size="lg">
       <div className="space-y-5">
+        {falta.tipificacionOriginal && <div className="p-3 border rounded-xl"><strong>Tipificación ajustada por cancelación extraordinaria de un antecedente</strong><p>Registro original: {falta.tipificacionOriginal.articulo} / {falta.tipificacionOriginal.inciso}</p><p>El documento original se conserva. Revise su correspondencia con la tipificación actual.</p></div>}
         {/* Header — person info */}
         <div className="flex items-start gap-4 p-4 rounded-2xl bg-gradient-to-r from-[var(--navy-50)] to-[var(--navy-100)]">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--gold-400)] to-[var(--gold-600)] flex items-center justify-center text-[var(--navy-900)] font-bold text-lg flex-shrink-0">
@@ -61,11 +71,13 @@ export function EfectivoDetail({ falta, open, onClose }: EfectivoDetailProps) {
           <div className="flex flex-col items-end gap-1.5">
             <Badge variant={severity.variant}>{severity.label}</Badge>
             {falta.reincidencia && (
-              <Badge variant="danger" dot>Reincidencia Escalada</Badge>
+              <Badge variant="danger" dot>Reincidencia</Badge>
             )}
           </div>
         </div>
 
+        {falta.conductaOrigen && <div className="p-3 rounded-xl border space-y-1"><p><strong>Falta cometida:</strong> {falta.conductaOrigen.articulo} / {falta.conductaOrigen.inciso}</p><p><strong>Período para considerar la reincidencia:</strong> comienza el {formatDisciplinaryDate(falta.fechaInicioCadena)} y vence el {formatDisciplinaryDate(falta.fechaVencimientoCadena)}.</p><p>{falta.estadoPlazoCadena==="vencida"?"El período para considerar la reincidencia ha finalizado. Las sanciones permanecen en el historial.":"Registrar otra reincidencia no cambia este vencimiento."}</p></div>}
+        {falta.revisionCadena && <p role="alert">Los antecedentes de esta falta requieren revisión: {falta.revisionCadena}</p>}
         {/* Detail grid */}
         <div className="grid grid-cols-2 gap-3">
           <DetailField icon={Icons.fileText} label="Artículo" value={falta.articulo} />
@@ -77,52 +89,37 @@ export function EfectivoDetail({ falta, open, onClose }: EfectivoDetailProps) {
         {falta.tipoRegistro === "reincidencia_escalada" && (
           <div className="p-4 rounded-xl bg-[var(--warning-50)] border border-[var(--warning-100)]">
             <p className="text-xs font-medium text-[var(--warning-600)] mb-1.5 uppercase tracking-wider">
-              Origen de Reincidencia
+              Sanción anterior relacionada
             </p>
             {falta.reincidenciaOrigen ? (
               <>
                 <p className="text-sm font-semibold text-[var(--navy-900)]">
-                  Sancion previa usada: {formatArticleShort(falta.reincidenciaOrigen.articuloBase)} {formatIncisoShort(falta.reincidenciaOrigen.incisoBase)}
+                  {formatArticleShort(falta.reincidenciaOrigen.articuloBase)} {formatIncisoShort(falta.reincidenciaOrigen.incisoBase)}
                 </p>
-                {falta.reincidenciaOrigen.origenReincidenciaPrevia && (
-                  <p className="mt-1 text-sm font-medium text-[var(--warning-600)] leading-relaxed">
-                    {formatReincidenciaOrigin(falta.reincidenciaOrigen)}
-                  </p>
-                )}
                 <p className="mt-1 text-sm text-[var(--navy-800)] leading-relaxed">
                   {falta.reincidenciaOrigen.incisoBase}
                 </p>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
                   <DetailField
                     icon={Icons.calendar}
-                    label="Fecha previa"
-                    value={String(falta.reincidenciaOrigen.fechaSancionReferencia ?? "N/A").slice(0, 10)}
+                    label="Fecha de la sanción anterior"
+                    value={formatDisciplinaryDate(falta.reincidenciaOrigen.fechaSancionReferencia)}
                   />
                   <DetailField
                     icon={Icons.clipboard}
-                    label="Memo previo"
+                    label="Documento de la sanción anterior"
                     value={falta.reincidenciaOrigen.memorandumReferencia ?? "N/A"}
                   />
                   <DetailField
                     icon={Icons.building}
-                    label="Unidad previa"
+                    label="Unidad que registró la sanción anterior"
                     value={falta.reincidenciaOrigen.unidadReferenciaNombre ?? "N/A"}
                   />
                 </div>
-                {falta.reincidenciaOrigen.origenReincidenciaPrevia && (
-                  <div className="mt-3 rounded-lg border border-[var(--warning-100)] bg-white/70 p-3">
-                    <p className="text-xs font-medium text-[var(--navy-500)] mb-1 uppercase tracking-wider">Origen individualizado de la reincidencia previa</p>
-                    <p className="text-sm font-semibold text-[var(--navy-900)]">
-                      {formatArticleShort(falta.reincidenciaOrigen.origenReincidenciaPrevia.articuloBase)} {formatIncisoShort(falta.reincidenciaOrigen.origenReincidenciaPrevia.incisoBase)}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--navy-600)]">
-                      Memo {falta.reincidenciaOrigen.origenReincidenciaPrevia.memorandumReferencia ?? "N/A"} | Fecha {String(falta.reincidenciaOrigen.origenReincidenciaPrevia.fechaSancionReferencia ?? "N/A").slice(0, 10)} | Unidad {falta.reincidenciaOrigen.origenReincidenciaPrevia.unidadReferenciaNombre ?? "N/A"}
-                    </p>
-                  </div>
-                )}
+                <div className="mt-3"><SancionesRelacionadas origin={falta.reincidenciaOrigen} /></div>
               </>
             ) : (
-              <p className="text-sm text-[var(--warning-600)]">Origen no registrado en el documento historico.</p>
+              <p className="text-sm text-[var(--warning-600)]">La sanción anterior relacionada no consta en el registro histórico.</p>
             )}
           </div>
         )}

@@ -1,0 +1,298 @@
+TAP version 13
+# Subtest: A01: primera conducta inicia una base con fecha y códigos canónicos
+ok 1 - A01: primera conducta inicia una base con fecha y códigos canónicos
+  ---
+  duration_ms: 1.7435
+  type: 'test'
+  ...
+# Subtest: A02-A03: la misma conducta escala exactamente un nivel desde el último registro
+ok 2 - A02-A03: la misma conducta escala exactamente un nivel desde el último registro
+  ---
+  duration_ms: 0.6011
+  type: 'test'
+  ...
+# Subtest: A04-A05 R01: cadenas9/1 y9/2 alcanzan11/1 sin colisión
+ok 3 - A04-A05 R01: cadenas9/1 y9/2 alcanzan11/1 sin colisión
+  ---
+  duration_ms: 0.4604
+  type: 'test'
+  ...
+# Subtest: A06-A07: las conductas sustantivas10/X no son la conducta10/1
+ok 4 - A06-A07: las conductas sustantivas10/X no son la conducta10/1
+  ---
+  duration_ms: 0.1844
+  type: 'test'
+  ...
+# Subtest: A08: no se admite salto9→11 ni10/2→10/1
+ok 5 - A08: no se admite salto9→11 ni10/2→10/1
+  ---
+  duration_ms: 0.3211
+  type: 'test'
+  ...
+# Subtest: A09 R02: la raíz9/1 identifica el11/1 final y remite, sin repetir escalón
+ok 6 - A09 R02: la raíz9/1 identifica el11/1 final y remite, sin repetir escalón
+  ---
+  duration_ms: 0.1446
+  type: 'test'
+  ...
+# Subtest: A15: día364 escala; días365/366 reinician; el último escalón no renueva
+ok 7 - A15: día364 escala; días365/366 reinician; el último escalón no renueva
+  ---
+  duration_ms: 0.1762
+  type: 'test'
+  ...
+# Subtest: A16 R03: raíz vencida con descendiente reciente permite nueva9/X
+ok 8 - A16 R03: raíz vencida con descendiente reciente permite nueva9/X
+  ---
+  duration_ms: 0.1216
+  type: 'test'
+  ...
+# Subtest: A17: raíz10/X vencida permite nueva10/X
+ok 9 - A17: raíz10/X vencida permite nueva10/X
+  ---
+  duration_ms: 0.394
+  type: 'test'
+  ...
+# Subtest: A18: fechas futuras, inválidas y medianoche en Bolivia
+ok 10 - A18: fechas futuras, inválidas y medianoche en Bolivia
+  ---
+  duration_ms: 10.8546
+  type: 'test'
+  ...
+# Subtest: A19-A20: referencia explícita permite mismo día; inserción anterior a registros exige revisión
+ok 11 - A19-A20: referencia explícita permite mismo día; inserción anterior a registros exige revisión
+  ---
+  duration_ms: 0.2403
+  type: 'test'
+  ...
+# Subtest: A26-A37: bifurcación, huérfano terminal, ciclo e identidad cruzada se detectan
+ok 12 - A26-A37: bifurcación, huérfano terminal, ciclo e identidad cruzada se detectan
+  ---
+  duration_ms: 0.3601
+  type: 'test'
+  ...
+# Subtest: A37: referencia y metadatos alterados requieren revisión
+ok 13 - A37: referencia y metadatos alterados requieren revisión
+  ---
+  duration_ms: 0.1543
+  type: 'test'
+  ...
+# Subtest: A45: cada escalón conserva fecha de vencimiento de la raíz
+ok 14 - A45: cada escalón conserva fecha de vencimiento de la raíz
+  ---
+  duration_ms: 0.1182
+  type: 'test'
+  ...
+# Subtest: A46 R13: una cadena ya escrita después de vencer requiere revisión; no se extiende
+ok 15 - A46 R13: una cadena ya escrita después de vencer requiere revisión; no se extiende
+  ---
+  duration_ms: 0.0812
+  type: 'test'
+  ...
+# Subtest: A47: vencimiento independiente por conducta
+ok 16 - A47: vencimiento independiente por conducta
+  ---
+  duration_ms: 0.1679
+  type: 'test'
+  ...
+# Subtest: A48: cadenas sucesivas de la misma conducta no heredan niveles
+ok 17 - A48: cadenas sucesivas de la misma conducta no heredan niveles
+  ---
+  duration_ms: 0.1544
+  type: 'test'
+  ...
+# Subtest: A50: una evaluación histórica dentro del plazo no depende del día actual
+ok 18 - A50: una evaluación histórica dentro del plazo no depende del día actual
+  ---
+  duration_ms: 0.0788
+  type: 'test'
+  ...
+# Subtest: A52: vencimiento no altera filas ni estado de sanciones
+ok 19 - A52: vencimiento no altera filas ni estado de sanciones
+  ---
+  duration_ms: 0.5734
+  type: 'test'
+  ...
+# Subtest: 365 días se mantienen en año bisiesto
+ok 20 - 365 días se mantienen en año bisiesto
+  ---
+  duration_ms: 0.0742
+  type: 'test'
+  ...
+# Subtest: A42: un historial mayor a100 registros no trunca la selección de la cadena
+ok 21 - A42: un historial mayor a100 registros no trunca la selección de la cadena
+  ---
+  duration_ms: 4.2291
+  type: 'test'
+  ...
+# Subtest: siete días: solo autor y unidad, frontera exacta excluida
+ok 22 - siete días: solo autor y unidad, frontera exacta excluida
+  ---
+  duration_ms: 0.693
+  type: 'test'
+  ...
+# Subtest: cinco días: pendiente deja de bloquear exactamente al vencer
+ok 23 - cinco días: pendiente deja de bloquear exactamente al vencer
+  ---
+  duration_ms: 0.1798
+  type: 'test'
+  ...
+# Subtest: antecedentes vigentes esperan siete días y ausencia de solicitud
+ok 24 - antecedentes vigentes esperan siete días y ausencia de solicitud
+  ---
+  duration_ms: 0.181
+  type: 'test'
+  ...
+# Subtest: cancelar Art9: solo sus descendientes bajan un nivel y se enlazan
+ok 25 - cancelar Art9: solo sus descendientes bajan un nivel y se enlazan
+  ---
+  duration_ms: 1.62
+  type: 'test'
+  ...
+# Subtest: cancelar Art10: Art11 pasa a Art10 con origen Art9
+ok 26 - cancelar Art10: Art11 pasa a Art10 con origen Art9
+  ---
+  duration_ms: 0.2721
+  type: 'test'
+  ...
+# Subtest: cancelar última sanción no modifica las anteriores
+ok 27 - cancelar última sanción no modifica las anteriores
+  ---
+  duration_ms: 0.0766
+  type: 'test'
+  ...
+# Subtest: cadenas cíclicas, incompletas o con salto no se rebajan inventando antecedentes
+ok 28 - cadenas cíclicas, incompletas o con salto no se rebajan inventando antecedentes
+  ---
+  duration_ms: 0.4441
+  type: 'test'
+  ...
+# Subtest: CSV con comas, comillas escapadas y multilínea
+ok 29 - CSV con comas, comillas escapadas y multilínea
+  ---
+  duration_ms: 0.1671
+  type: 'test'
+  ...
+# Subtest: impresión y exportación no interpretan HTML/fórmulas
+ok 30 - impresión y exportación no interpretan HTML/fórmulas
+  ---
+  duration_ms: 0.1986
+  type: 'test'
+  ...
+# Subtest: agrupación mensual utiliza Bolivia
+ok 31 - agrupación mensual utiliza Bolivia
+  ---
+  duration_ms: 10.8999
+  type: 'test'
+  ...
+# Subtest: A54: cancelar raíz cuenta un nuevo año desde la sanción promovida a base
+ok 32 - A54: cancelar raíz cuenta un nuevo año desde la sanción promovida a base
+  ---
+  duration_ms: 0.7039
+  type: 'test'
+  ...
+# Subtest: A34: cancelaciones sucesivas vuelven a promover la base conservando historia
+ok 33 - A34: cancelaciones sucesivas vuelven a promover la base conservando historia
+  ---
+  duration_ms: 1.298
+  type: 'test'
+  ...
+# Subtest: A33: cancelar la base10/X promueve11/1 a10/X y abre el año desde esa sanción
+ok 34 - A33: cancelar la base10/X promueve11/1 a10/X y abre el año desde esa sanción
+  ---
+  duration_ms: 0.4801
+  type: 'test'
+  ...
+# Subtest: A35-A53: otra conducta y un episodio posterior de la misma conducta permanecen intactos
+ok 35 - A35-A53: otra conducta y un episodio posterior de la misma conducta permanecen intactos
+  ---
+  duration_ms: 1.2104
+  type: 'test'
+  ...
+# Subtest: Una promoción que solapa otra cadena exige revisión, sin mezclar episodios
+ok 36 - Una promoción que solapa otra cadena exige revisión, sin mezclar episodios
+  ---
+  duration_ms: 0.6608
+  type: 'test'
+  ...
+# Subtest: Una hoja histórica inválida se puede dejar sin efecto sin retipificar otros registros
+ok 37 - Una hoja histórica inválida se puede dejar sin efecto sin retipificar otros registros
+  ---
+  duration_ms: 0.1406
+  type: 'test'
+  ...
+# Subtest: detecta encabezados institucionales y CSV con punto y coma
+ok 38 - detecta encabezados institucionales y CSV con punto y coma
+  ---
+  duration_ms: 1.2325
+  type: 'test'
+  ...
+# Subtest: normaliza fechas institucionales y rechaza fechas inexistentes
+ok 39 - normaliza fechas institucionales y rechaza fechas inexistentes
+  ---
+  duration_ms: 1.038
+  type: 'test'
+  ...
+# Subtest: normaliza codigo de unidad y documento
+ok 40 - normaliza codigo de unidad y documento
+  ---
+  duration_ms: 0.3062
+  type: 'test'
+  ...
+# Subtest: crea vista previa valida sin modificar datos actuales del personal
+ok 41 - crea vista previa valida sin modificar datos actuales del personal
+  ---
+  duration_ms: 0.8239
+  type: 'test'
+  ...
+# Subtest: marca duplicados dentro del mismo archivo
+ok 42 - marca duplicados dentro del mismo archivo
+  ---
+  duration_ms: 7.2349
+  type: 'test'
+  ...
+# Subtest: A26 R05: dos10/1 de la misma base no quedan ambos válidos
+ok 43 - A26 R05: dos10/1 de la misma base no quedan ambos válidos
+  ---
+  duration_ms: 11.521
+  type: 'test'
+  ...
+# Subtest: A27: el archivo exige antecedente concreto para una escalada
+ok 44 - A27: el archivo exige antecedente concreto para una escalada
+  ---
+  duration_ms: 0.3293
+  type: 'test'
+  ...
+# Subtest: A05: dos10/1 de conductas distintas sí son válidos en el mismo archivo
+ok 45 - A05: dos10/1 de conductas distintas sí son válidos en el mismo archivo
+  ---
+  duration_ms: 1.7717
+  type: 'test'
+  ...
+# Subtest: A17: la importación permite nueva10/X cuando venció la cadena original
+ok 46 - A17: la importación permite nueva10/X cuando venció la cadena original
+  ---
+  duration_ms: 0.3699
+  type: 'test'
+  ...
+# Subtest: A20: la importación no inserta silenciosamente una base anterior a registros posteriores
+ok 47 - A20: la importación no inserta silenciosamente una base anterior a registros posteriores
+  ---
+  duration_ms: 0.3001
+  type: 'test'
+  ...
+# Subtest: A08: importar11/1 directamente desde9/X se rechaza
+ok 48 - A08: importar11/1 directamente desde9/X se rechaza
+  ---
+  duration_ms: 0.3383
+  type: 'test'
+  ...
+1..48
+# tests 48
+# suites 0
+# pass 48
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 325.4943

@@ -48,6 +48,7 @@ export const createFaltaSchema = z
     motivo: z.string().transform(normalizeFreeText).pipe(z.string().min(3)),
     modoRegistro: z.enum(["actual", "historico"]).optional(),
     unidadEfectivoHistoricaId: z.string().optional(),
+    decisionVersion: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     reincidenciaOrigen: reincidenciaOrigenSchema.optional().nullable(),
   })
   .superRefine((value, ctx) => {
@@ -89,13 +90,6 @@ export const createFaltaSchema = z
       }
     }
 
-    if (value.modoRegistro === "historico" && !value.unidadEfectivoHistoricaId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["unidadEfectivoHistoricaId"],
-        message: "Debe seleccionar la unidad donde prestaba funciones al momento de la sancion",
-      });
-    }
   });
 
 export const listFaltasSearchSchema = z.object({
@@ -121,8 +115,8 @@ export const createPersonalSchema = z.object({
   nombres: z.string().transform(normalizePersonName).pipe(z.string().min(1)),
   apellidos: z.string().transform(normalizePersonName).pipe(z.string().min(1)),
   sexo: z.enum(["Masculino", "Femenino"]),
-  unidadId: z.string().min(1),
-  unidadNombre: z.string().transform(normalizeWhitespace).pipe(z.string().min(1)),
+  unidadId: z.string().optional(),
+  unidadNombre: z.string().optional(),
   estado: personalEstadoSchema,
 });
 

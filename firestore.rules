@@ -1,7 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() { return request.auth != null; }
+    function isSignedIn() {
+      return request.auth != null
+        && userDoc().data.get('status', 'activo') == 'activo'
+        && userDoc().data.get('isActive', true) == true
+        && userDoc().data.get('mustChangePassword', false) == false;
+    }
 
     function userDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
@@ -36,7 +41,9 @@ service cloud.firestore {
     }
 
     match /personal/{id} {
-      allow read: if isSignedIn() && canReadUnidad(resource.data.unidadId);
+      // Unit registrars use the purpose-limited API search over the general
+      // roster; unit lists are derived from sanctions, not a personnel unit.
+      allow read: if isSignedIn() && isDptoReader();
       allow write: if false;
     }
 
@@ -94,6 +101,11 @@ service cloud.firestore {
       allow read: if isSignedIn() && isDpto();
       allow write: if false;
     }
+
+    // Server-only records. No client writes to confirmations or notifications.
+    match /confirmaciones/{id} { allow read, write: if false; }
+    match /notificaciones/{id} { allow read, write: if false; }
+    match /access_control/{id} { allow read, write: if false; }
 
     match /integraciones_sanciones/{id} {
       allow read: if isSignedIn() && isDpto();

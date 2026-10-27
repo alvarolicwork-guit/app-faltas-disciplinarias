@@ -1,0 +1,17 @@
+{
+  "fechaEjecucionDominio": "2026-10-27T11:51:47.950Z",
+  "entorno": "Local: funciones reales, selección de ruta en memoria y transporte simulado para recurrenceSnapshot; sin conexión Firebase",
+  "defectosReproducidos": ["R01", "R02", "R03", "R04", "R05", "R06", "R07"],
+  "controlesPositivos": ["C01: aislamiento de otra cadena en rebaja por referencias", "C02: espera y solicitud pendiente/vencida"],
+  "pruebasExistentes": {"dominio": 10, "importacion": 5, "aprobadas": 15, "fallidas": 0},
+  "validacionArtefactos": {"typescriptNoEmit": "aprobado", "enlacesPlan": "validos", "hashesCodigoAuditado": "sin cambios", "emuladores": "cerrados"},
+  "advertencia": "Las reproducciones esperan el fallo actual; no certifican aceptación. Las pruebas existentes no cubrían cadenas paralelas completas.",
+  "sha256": {
+    "src/lib/domain/disciplinary-recidivism.ts": "a67f564b87eff1a96453c2a65bb053710ac8afc571f67075239377cdf0d82bd9",
+    "src/lib/domain/sanction-policy.ts": "b374859dda6f03db87173a0ba67bfcbcb2c0d5b1de5400c924e1c80d73792cda",
+    "src/lib/server/operations.ts": "b0b7906e64457a13319f314317ab0c590e37582656bdc3c76d243fcf2b2225e5",
+    "src/app/api/faltas/route.ts": "66613745c35afaa23be8bf460138913be0bf896adffcb993bcd33a4d1918850e",
+    "src/lib/imports/historical-sanctions.ts": "5ea5daf6e8413cab3099e1200afbdaf59a764d29c3447195f2cd9459117d69a6",
+    "src/app/api/imports/faltas/[id]/confirm/route.ts": "da2ce31b64fedea53669de8417f2cbed75440d24a60c6d0ee8c98e58adabad8b"
+  }
+}

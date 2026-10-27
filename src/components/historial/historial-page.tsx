@@ -11,10 +11,23 @@ import { useAuth, canViewGlobalPersonHistory, isGlobalRole, isUnitScopedRole } f
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
 import { useToast } from "@/hooks/use-toast";
-import type { ReincidenciaOrigenView } from "@/lib/domain/reincidencia-format";
+import { formatDisciplinaryDate, type ReincidenciaOrigenView } from "@/lib/domain/reincidencia-format";
 import { EfectivoDetail } from "./efectivo-detail";
+import { CancelacionButton } from "./cancelacion-button";
 
 type Falta = {
+  conductaOrigen?: {articulo:string;inciso:string};
+  cadenaId?:string;
+  fechaInicioCadena?:string;
+  fechaVencimientoCadena?:string;
+  estadoPlazoCadena?:string;
+  revisionCadena?:string|null;
+  puedeCancelarDirectamente?: boolean;
+  tipificacionOriginal?: { articulo: string; inciso: string };
+  documentoRequiereRevision?: boolean;
+  puedeSolicitarCancelacion?: boolean;
+  createdBy?: { uid?: string };
+  createdAt?: string;
   id: string;
   nombreCompleto: string;
   ci: string;
@@ -87,7 +100,7 @@ export function HistorialPage() {
   const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("registrada");
   const [pendingRequestIds, setPendingRequestIds] = useState<Set<string>>(new Set());
   const [solicitudesRows, setSolicitudesRows] = useState<SolicitudResumen[]>([]);
-  const [solicitudesFilter, setSolicitudesFilter] = useState<"pendiente" | "aprobada">("pendiente");
+  const [solicitudesFilter, setSolicitudesFilter] = useState<"pendiente" | "aprobada" | "rechazada">("pendiente");
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [requestTarget, setRequestTarget] = useState<Falta | null>(null);
   const [requestType, setRequestType] = useState<"representacion" | "error_insercion">("representacion");
@@ -99,7 +112,7 @@ export function HistorialPage() {
   const canSelectUnit = sessionUser ? !isUnitScopedRole(sessionUser.role) : false;
   const canUseGlobalPersonHistory = sessionUser ? canViewGlobalPersonHistory(sessionUser.role) : false;
   const activeHistoryScope: HistoryScope = canUseGlobalPersonHistory ? historyScope : "unit";
-  const canRequestDeletion = sessionUser ? isUnitScopedRole(sessionUser.role) && activeHistoryScope === "unit" : false;
+  const canRequestDeletion = sessionUser ? sessionUser.role === "admin_unidad" && activeHistoryScope === "unit" : false;
   const canViewDeletionRequests = sessionUser ? isUnitScopedRole(sessionUser.role) || isGlobalRole(sessionUser.role) : false;
   const isPersonScope = canUseGlobalPersonHistory && activeHistoryScope === "person";
   const effectiveUnitId = canSelectUnit ? selectedUnitId : (sessionUser?.unidadId ?? "");
@@ -174,7 +187,7 @@ export function HistorialPage() {
     }
   }, [buildPersonCacheKey, fetchWithCache, get, estadoFilter]);
 
-  const refreshSolicitudes = useCallback(async (estado: "pendiente" | "aprobada") => {
+  const refreshSolicitudes = useCallback(async (estado: "pendiente" | "aprobada" | "rechazada") => {
     try {
       const payload = await fetchWithCache(
         `solicitudes-baja:${estado}`,
@@ -352,7 +365,7 @@ export function HistorialPage() {
 
     const isRepresentacion = requestType === "representacion";
 
-    if (isRepresentacion && requestMemo.trim().length < 3) {
+    if (isRepresentacion && (requestMemo.trim().length < 3 || requestComment.trim().length < 8)) {
       toast.warning("Debe indicar el memorandum de representacion");
       return;
     }
@@ -369,7 +382,7 @@ export function HistorialPage() {
         tipoSolicitud: requestType,
         memorandumRepresentacion: isRepresentacion ? requestMemo.trim() : undefined,
         comentario: isRepresentacion ? (requestComment.trim() || undefined) : undefined,
-        motivo: !isRepresentacion ? requestReason.trim() : undefined,
+        motivo: isRepresentacion ? requestComment.trim() : requestReason.trim(),
       };
 
       await post("/api/faltas/solicitudes", payload);
@@ -390,7 +403,7 @@ export function HistorialPage() {
 
   const isRepresentacion = requestType === "representacion";
   const requestFormValid = isRepresentacion
-    ? requestMemo.trim().length >= 3 && (requestComment.trim().length === 0 || requestComment.trim().length >= 4)
+    ? requestMemo.trim().length >= 3 && requestComment.trim().length >= 8
     : requestReason.trim().length >= 8;
   const canShowHistoryPanel = isPersonScope ? !!selectedPersonal : !!effectiveUnitId;
   const showUnitColumn = isPersonScope;
@@ -600,7 +613,7 @@ export function HistorialPage() {
                       <td className="px-4 py-3 text-[var(--navy-700)] whitespace-nowrap">{row.fechaSancion}</td>
                       <td className="px-4 py-3 font-medium text-[var(--navy-900)]">{row.nombreCompleto}</td>
                       <td className="px-4 py-3 text-[var(--navy-600)]">{row.ci}</td>
-                      <td className="px-4 py-3">{getArticleBadge(row.articulo)}</td>
+                      <td className="px-4 py-3">{getArticleBadge(row.articulo)}{row.conductaOrigen&&<p className="text-xs mt-1">Falta cometida: {row.conductaOrigen.articulo.split(" - ")[0]} / inc. {row.conductaOrigen.inciso.split(".")[0]}</p>}{row.fechaVencimientoCadena&&<p className="text-xs">Período de reincidencia: {formatDisciplinaryDate(row.fechaInicioCadena)} – {formatDisciplinaryDate(row.fechaVencimientoCadena)}{row.estadoPlazoCadena==="vencida"?" (finalizado)":""}</p>}{row.revisionCadena&&<p className="text-xs text-red-700">Los antecedentes requieren revisión</p>}</td>
                       {showUnitColumn && <td className="px-4 py-3 text-[var(--navy-600)]">{row.unidadSancionNombre ?? row.unidadNombre ?? "-"}</td>}
                       <td className="px-4 py-3 text-[var(--navy-600)]">{row.memorandum}</td>
                       <td className="px-4 py-3">
@@ -610,7 +623,8 @@ export function HistorialPage() {
                         <Button variant="ghost" size="sm" icon={Icons.eye({ size: 14 })} onClick={(e) => { e.stopPropagation(); setSelectedFalta(row); }}>
                           Ver
                         </Button>
-                        {canRequestDeletion && (
+                        {row.puedeCancelarDirectamente && <CancelacionButton id={row.id} onComplete={() => { void refreshFaltasByUnit(effectiveUnitId, "", estadoFilter); }} />}
+                        {canRequestDeletion && row.createdBy?.uid === sessionUser?.uid && row.puedeSolicitarCancelacion && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -644,7 +658,7 @@ export function HistorialPage() {
                       <p className="text-sm font-bold text-[var(--navy-900)]">{row.nombreCompleto}</p>
                       <p className="text-xs text-[var(--navy-400)]">CI: {row.ci}</p>
                     </div>
-                    {getArticleBadge(row.articulo)}
+                    {getArticleBadge(row.articulo)}{row.conductaOrigen&&<p className="text-xs">Conducta: {row.conductaOrigen.articulo.split(" - ")[0]} / inc. {row.conductaOrigen.inciso.split(".")[0]}</p>}{row.fechaVencimientoCadena&&<p className="text-xs">Vence: {row.fechaVencimientoCadena}</p>}
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     <div><p className="text-[10px] text-[var(--navy-400)]">Fecha</p><p className="text-xs font-medium text-[var(--navy-700)]">{row.fechaSancion}</p></div>
@@ -667,7 +681,7 @@ export function HistorialPage() {
             <p className="text-sm text-[var(--navy-500)]">Seguimiento de solicitudes pendientes y aceptadas.</p>
           </div>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
-            {(["pendiente", "aprobada"] as const).map((status) => (
+            {(["pendiente", "aprobada", "rechazada"] as const).map((status) => (
               <button
                 key={status}
                 type="button"
@@ -779,12 +793,12 @@ export function HistorialPage() {
                 error={requestMemo.trim().length > 0 && requestMemo.trim().length < 3 ? "Minimo 3 caracteres" : undefined}
               />
               <Textarea
-                label="Comentario corto (opcional)"
+                label="Motivo de la representación (obligatorio)"
                 placeholder="Detalle breve del contexto de la representacion..."
                 rows={3}
                 value={requestComment}
                 onChange={(e) => setRequestComment(e.target.value)}
-                error={requestComment.trim().length > 0 && requestComment.trim().length < 4 ? "Si ingresa comentario, use al menos 4 caracteres" : undefined}
+                error={requestComment.trim().length > 0 && requestComment.trim().length < 8 ? "Mínimo ocho caracteres" : undefined}
               />
             </div>
           ) : (

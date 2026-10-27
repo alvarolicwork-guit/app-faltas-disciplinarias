@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     const [personalSnap, unitsSnap, existingSnap] = await Promise.all([
       db.collection("personal").get(),
       db.collection("unidades").where("estado", "==", "activa").get(),
-      db.collection("faltas").where("estado", "==", "registrada").get(),
+      db.collection("faltas").get(),
     ]);
 
     const personalByCi = new Map<string, PersonalImportLookup>();
@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
     const existing: ExistingSanctionLookup[] = existingSnap.docs.map((doc) => {
       const item = doc.data();
       const lookup: ExistingSanctionLookup = {
+        ...item,
         id: doc.id,
         personalId: safeString(item.personalId),
         ci: safeString(item.ci),
@@ -206,6 +207,12 @@ export async function POST(request: NextRequest) {
       normalizeHistoricalRow({ row, personalByCi, unitsById }),
     );
     applyHistoricalConsistencyChecks(previewRows, existing);
+    for (const row of previewRows) {
+      if (row.normalized?.originRowKey && ["valid", "warning"].includes(row.status)) {
+        row.status = "error";
+        row.errors.push({ field: "reincidencia", message: "Importe primero el antecedente; debe cumplir siete días y no tener una solicitud pendiente antes de registrar la reincidencia." });
+      }
+    }
 
     const validRows = previewRows.filter((row) => row.status === "valid").length;
     const warningRows = previewRows.filter((row) => row.status === "warning").length;
@@ -220,7 +227,7 @@ export async function POST(request: NextRequest) {
       fileHash: hash,
       fileSize: file.size,
       format: extension,
-      status: "preview",
+      status: "building_preview",
       totalRows: previewRows.length,
       validRows,
       warningRows,
@@ -248,6 +255,7 @@ export async function POST(request: NextRequest) {
       }
     }
     if (count > 0) await batch.commit();
+    await importRef.update({ status: "preview", updatedAt: Timestamp.now() });
 
     await db.collection("audit_logs").add({
       actorUid: actor.uid,

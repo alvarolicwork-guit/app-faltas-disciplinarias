@@ -1,0 +1,69 @@
+{
+  "dateLocal": "2026-10-27",
+  "generatedAt": "2026-10-27T16:29:46.384Z",
+  "state": "implementacion_local_comprobada_sin_publicar",
+  "tests": {
+    "domainAndImports": {
+      "passed": 48,
+      "failed": 0
+    },
+    "authFirestoreHandlers": {
+      "passed": 30,
+      "failed": 0,
+      "project": "demo-app-faltas"
+    },
+    "browser": {
+      "passed": true,
+      "checks": 12,
+      "browserErrors": [],
+      "checkedAt": "2026-10-27T16:18:36.430Z"
+    }
+  },
+  "verification": {
+    "lint": "aprobado",
+    "typescript": "aprobado",
+    "build": "aprobado_Next16.4.3_Webpack",
+    "diff": "sin_errores"
+  },
+  "production": {
+    "readOnly": true,
+    "rowsRead": 176,
+    "rowsWithAdditiveMetadata": 171,
+    "personsWithAdditiveMetadata": 149,
+    "rowsRequiringReview": 5,
+    "reviewReasons": {
+      "overlappingPeriods": 2,
+      "branches": 3
+    },
+    "manifestExported": false,
+    "writesPerformed": false,
+    "published": false
+  },
+  "approvedPolicy": {
+    "ordinaryDaysFromBase": 365,
+    "recurrenceDoesNotExtendPeriod": true,
+    "newBaseAllowedAfterExpiry": true,
+    "rootCancellation": "Nuevo año desde la fecha de la sanción promovida a base"
+  },
+  "limitations": [
+    "Datos históricos en conflicto requieren revisión documental; no se corrigen automáticamente",
+    "Migración/restauración real, publicación y verificación del programador pendientes",
+    "Accesibilidad completa y carga/costo de producción no certificados"
+  ],
+  "sha256": {
+    "src/lib/domain/recurrence-chain.ts": "d24160f1bde8e7d6ed896ff98203787fd78b3c3f4bf1a0850a9bd7a8dc4b7d44",
+    "src/lib/domain/sanction-policy.ts": "ea72ca236f12b27f3539557b2232a7a0dce01fdfd9a14192bd95ed7977f3dce9",
+    "src/lib/server/recurrence.ts": "ceec0812d77fe8429cdc7ba3f928dc878fca9f107915ac082984ea2abeb973d3",
+    "src/lib/server/cancellations.ts": "68787e416eb5b2a2f42a43f8fb5ab79fcc4e80e19627a770a36719fea5111fab",
+    "src/lib/server/chain-migration.ts": "d3628b639d2018e82fe687c30e29de545fd6411749752bd712b1dda993a809c5",
+    "src/lib/server/chain-views.ts": "337645e4c613bd0fe9c071103aa871329a9be159bdf382dc72b989137c4644cd",
+    "src/app/api/faltas/route.ts": "432c81cbc71a0901dfce4f8c05f7fd4492074ed647b03cf214afdb18a1ea9e76",
+    "src/app/api/faltas/evaluar/route.ts": "9a1b79e5754763d6ea058e0d0fee80f25ca291223922aa5bb3a55c0469a4e8d0",
+    "src/app/api/antecedentes/route.ts": "ada0facd240ea938a22077b177df3e35c58552e8bac75061813bd33400ce2ed7",
+    "src/app/api/imports/faltas/[id]/confirm/route.ts": "717f0e9825d5eb931c7ef6bae8af1d4aee2c2a35131f168d9434a02974ed7414",
+    "src/lib/imports/historical-sanctions.ts": "cc5b02d9b87f8e52d9b93970fa9ad59d86952af597581b759b12ae6b7d485443",
+    "src/components/registro/registro-page.tsx": "2a9848ec4d04291e3345483a205875a034275f18798dbb0331249b557e183f57",
+    "package.json": "4914681cf42b1e33a37b2a5941e1ad3cf51694964a2e6cabc35d179c02fea1d9",
+    "next.config.ts": "47b5d11ebb71baaade1a6e6a89e8eb4b16342abb690f92b04e806042507e61a2"
+  }
+}

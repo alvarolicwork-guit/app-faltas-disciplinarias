@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { ChainError } from "@/lib/domain/recurrence-chain";
+import { matchesDecision, newChainMetadata, snapshotChain } from "@/lib/domain/recurrence-chain";
+import { assertDecisionAvailable, conductForInput, evaluateInTransaction } from "@/lib/server/recurrence";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -14,6 +18,7 @@ import {
   type HistoricalSanctionPreviewRow,
 } from "@/lib/imports/historical-sanctions";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { assertCurrentActor, payloadHash, OperationError } from "@/lib/server/operations";
 
 export const runtime = "nodejs";
 
@@ -38,6 +43,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { id: importId } = await context.params;
   const db = getAdminDb();
   let locked = false;
+  const processingOwner=randomUUID();
+  const leaseDuration=15*60_000;
 
   try {
     const actor = await getRequestUser(request);
@@ -65,12 +72,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const snap = await tx.get(importRef);
       if (!snap.exists) throw new Error("IMPORT_NOT_FOUND");
       const item = snap.data()!;
+      if (!["preview", "failed", "confirmed", "reverted", "processing"].includes(item.status)) throw new Error("IMPORT_NOT_READY");
       if (item.status === "confirmed") throw new Error("IMPORT_ALREADY_CONFIRMED");
       if (item.status === "reverted") throw new Error("IMPORT_ALREADY_REVERTED");
-      if (item.status === "processing") throw new Error("IMPORT_IN_PROGRESS");
+      if (item.status === "processing" && (!item.processingLeaseUntil?.toMillis || item.processingLeaseUntil.toMillis()>Date.now())) throw new Error("IMPORT_IN_PROGRESS");
       tx.update(importRef, {
         status: "processing",
         processingAt: Timestamp.now(),
+        processingOwner, processingLeaseUntil:Timestamp.fromMillis(Date.now()+leaseDuration),
         updatedAt: Timestamp.now(),
       });
     });
@@ -84,10 +93,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const acceptedRows = previewRows.filter(
       (row) => (row.status === "valid" || row.status === "warning") && row.normalized,
     );
-    const skippedRows = previewRows.length - acceptedRows.length;
+    let skippedRows = previewRows.length - acceptedRows.length;
     if (acceptedRows.length === 0) throw new Error("IMPORT_NO_VALID_ROWS");
 
     const normalizedRows = acceptedRows.map((row) => row.normalized!);
+    if (normalizedRows.some(row => row.originRowKey)) {
+      throw new Error("Importe primero las sanciones base. Los antecedentes deben cumplir siete días sin solicitudes pendientes antes de registrar reincidencias.");
+    }
     const personalIds = [...new Set(normalizedRows.map((row) => row.personalId))];
     const unitIds = [...new Set(normalizedRows.flatMap((row) => [
       row.unidadSancionId,
@@ -179,14 +191,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const now = Timestamp.now();
-    let batch = db.batch();
-    let writes = 0;
     let createdRows = 0;
 
     for (const row of normalizedRows) {
       const personal = personalMap.get(row.personalId)!;
       const sanctionUnit = unitMap.get(row.unidadSancionId)!;
-      const historicalUnit = unitMap.get(row.unidadEfectivoHistoricaId)!;
       const reincidenciaOrigen = originFor(row);
       const schemaResult = createFaltaSchema.safeParse({
         personalId: row.personalId,
@@ -218,8 +227,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         unidadNombre: safeString(sanctionUnit.nombre),
         unidadSancionId: row.unidadSancionId,
         unidadSancionNombre: safeString(sanctionUnit.nombre),
-        unidadEfectivoId: row.unidadEfectivoHistoricaId,
-        unidadEfectivoNombre: safeString(historicalUnit.nombre),
+        unidadEfectivoId: null,
+        unidadEfectivoNombre: null,
         ci: safeString(personal.ci),
         nombreCompleto: safeString(personal.nombreCompleto),
         grado: safeString(personal.grado),
@@ -235,8 +244,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         modoRegistro: "historico",
         cargaHistorica: true,
         origenRegistro: "importacion_historica",
-        unidadActualEfectivoId: safeString(personal.unidadId),
-        unidadActualEfectivoNombre: safeString(personal.unidadNombre),
+        unidadActualEfectivoId: null,
+        unidadActualEfectivoNombre: null,
         reincidencia: isReincidenciaEscalada(row.articulo, row.inciso),
         reincidenciaReferencia: reincidenciaOrigen,
         reincidenciaOrigen,
@@ -252,8 +261,33 @@ export async function POST(request: NextRequest, context: RouteContext) {
         updatedBy: { uid: actor.uid, email: actor.email, role: actor.role },
       };
 
-      batch.set(faltaRef, payload);
-      batch.set(db.collection("audit_logs").doc(`import_${importId}_${row.rowKey}`), {
+      const inserted = await db.runTransaction(async tx => {
+        await assertCurrentActor(tx, db, actor);
+        const lease=(await tx.get(importRef)).data();
+        if(lease?.processingOwner!==processingOwner || lease.status!=="processing")throw new Error("IMPORT_STATE_CHANGED");
+        const personRef = db.collection("personal").doc(row.personalId);
+        await tx.get(personRef);
+        const existing = await tx.get(faltaRef);
+        if (existing.exists) return false; // Retry must never resurrect an annulled row.
+        const duplicate = await tx.get(db.collection("faltas").where("importKey", "==", row.importKey));
+        if (!duplicate.empty) return false;
+        const personRows = await tx.get(db.collection("faltas").where("personalId", "==", row.personalId));
+        const conduct = conductForInput(personRows.docs.map(d => ({...d.data(),id:d.id})), {articulo:row.articulo,inciso:row.inciso,reincidenciaOrigen:row.originFaltaId?{faltaReferenciaId:row.originFaltaId}:null});
+        const evaluation = await evaluateInTransaction(tx, db, row.personalId, row.fechaSancion, conduct.articulo, conduct.inciso);
+        assertDecisionAvailable(evaluation.bloqueo);
+        if (!matchesDecision(row.articulo,row.inciso,row.originFaltaId??null,evaluation.decision)) throw new OperationError("Los antecedentes cambiaron o la tipificación histórica no corresponde a la cadena actual");
+        if (row.originFaltaId) {
+          const origin = await tx.get(db.collection("faltas").doc(row.originFaltaId));
+          if (!origin.exists || payloadHash(origin.data()) !== payloadHash(existingOrigins.get(row.originFaltaId))) throw new OperationError("El antecedente cambió durante la importación");
+        }
+        const validatedOrigin = snapshotChain(evaluation.decision.nodes);
+        const metadata = evaluation.decision.metadata ?? newChainMetadata(faltaId,conduct,row.fechaSancion);
+        const effectivePayload = { ...payload,...metadata,...(evaluation.skipRegistrationWait?{pruebaLocalSinEspera:true}:{}),reincidenciaOrigen:validatedOrigin,reincidenciaReferencia:validatedOrigin,
+          fundamentoOriginal:{...metadata,articulo:row.articulo,inciso:row.inciso,reincidenciaOrigen:validatedOrigin} };
+        tx.update(importRef,{processingLeaseUntil:Timestamp.fromMillis(Date.now()+leaseDuration),updatedAt:Timestamp.now()});
+        tx.set(personRef, { workflowUpdatedAt: Timestamp.now() }, { merge: true });
+        tx.create(faltaRef, { ...effectivePayload, confirmacion: { metodo: "confirmacion_lote", texto: "IMPORTAR SANCIONES", importId, actorUid: actor.uid, fecha: now } });
+        tx.set(db.collection("audit_logs").doc(`import_${importId}_${row.rowKey}`), {
         actorUid: actor.uid,
         actorEmail: actor.email,
         actorRole: actor.role,
@@ -264,23 +298,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         importId,
         importRow: row.sourceRow,
         before: null,
-        after: payload,
+        after: effectivePayload,
         createdAt: now,
       });
-      writes += 2;
-      createdRows += 1;
-
-      if (writes >= 400) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
-      }
+        return true;
+      });
+      if (inserted) createdRows += 1; else skippedRows += 1;
     }
-    if (writes > 0) await batch.commit();
 
     await db.runTransaction(async (tx) => {
       const latest = await tx.get(importRef);
-      if (!latest.exists || latest.data()!.status !== "processing") {
+      if (!latest.exists || (latest.data()!.status !== "processing" || latest.data()!.processingOwner !== processingOwner)) {
         throw new Error("IMPORT_STATE_CHANGED");
       }
       tx.update(importRef, {
@@ -317,11 +345,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     console.error(`POST /api/imports/faltas/${importId}/confirm failed`, error);
 
     if (locked) {
-      await db.collection("imports_sanciones").doc(importId).set({
-        status: "failed",
-        lastError: message.slice(0, 500),
-        updatedAt: Timestamp.now(),
-      }, { merge: true }).catch(() => undefined);
+      await db.runTransaction(async tx=>{const ref=db.collection("imports_sanciones").doc(importId);const current=(await tx.get(ref)).data();if(current?.processingOwner===processingOwner)tx.update(ref,{status:"failed",lastError:message.slice(0,500),updatedAt:Timestamp.now()});}).catch(()=>undefined);
     }
 
     const conflict =
@@ -330,6 +354,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       message.startsWith("ORIGIN_") ||
       message.startsWith("PERSONAL_") ||
       message.startsWith("UNIT_");
-    return NextResponse.json({ error: message }, { status: conflict ? 409 : 500 });
+    return NextResponse.json({ error: message }, { status: error instanceof OperationError ? error.status : error instanceof ChainError || conflict ? 409 : 500 });
   }
 }

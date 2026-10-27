@@ -1,17 +1,15 @@
-import { Query, Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
 import {
   USER_ROLES_CAN_WRITE_PERSONAL,
-  USER_ROLES_GLOBAL,
-  USER_ROLES_GLOBAL_READ,
   USER_ROLES_UNIT_SCOPE,
 } from "@/lib/domain/constants";
-import { canManageTransfers } from "@/lib/domain/roles";
 import { createPersonalSchema } from "@/lib/domain/schemas";
 import { ciKey } from "@/lib/domain/text-normalization";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { matchesPersonalSearch } from "@/lib/domain/personal-search";
 
 function unauthorized() {
   return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -28,83 +26,29 @@ function badRequest(message: string) {
 export async function GET(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
-
-    if (!actor) {
-      return unauthorized();
+    if (!actor) return unauthorized();
+    const db = getAdminDb();
+    const catalogo = request.nextUrl.searchParams.get("scope") === "catalogo";
+    const unitScoped = USER_ROLES_UNIT_SCOPE.has(actor.role);
+    if (catalogo && actor.role === "operador_unidad") return forbidden();
+    const unitId = unitScoped ? actor.unidadId : request.nextUrl.searchParams.get("unidadId");
+    const q = request.nextUrl.searchParams.get("q") ?? "";
+    let people;
+    if (!catalogo && unitId) {
+      const sanctions = await db.collection("faltas").where("unidadId", "==", unitId).get();
+      const ids = [...new Set(sanctions.docs.map(d=>String(d.data().personalId)))];
+      people = [];
+      for(let i=0;i<ids.length;i+=100) people.push(...await db.getAll(...ids.slice(i,i+100).map(id=>db.collection("personal").doc(id))));
+    } else {
+      if (unitScoped && !catalogo) return forbidden();
+      people = (await db.collection("personal").get()).docs;
     }
-
-    const adminDb = getAdminDb();
-    const search = request.nextUrl.searchParams;
-    const q = search.get("q")?.trim().toLowerCase();
-    const limitParam = Number(search.get("limit") ?? "30");
-    const limit = Number.isNaN(limitParam) ? 30 : Math.min(Math.max(limitParam, 1), 100);
-    const unidadIdParam = search.get("unidadId")?.trim();
-
-    const actorIsUnit = USER_ROLES_UNIT_SCOPE.has(actor.role);
-    let query: Query = adminDb.collection("personal");
-
-    if (actorIsUnit) {
-      query = query.where("unidadId", "==", actor.unidadId);
-    } else if (unidadIdParam && USER_ROLES_GLOBAL_READ.has(actor.role)) {
-      query = query.where("unidadId", "==", unidadIdParam);
-    } else if (!unidadIdParam && !q) {
-      return NextResponse.json({ data: [] }, { status: 200 });
-    }
-
-    query = query.limit(q ? 2000 : Math.max(limit, 300));
-    const snap = await query.get();
-
-    const rows: Array<{ id: string } & Record<string, unknown>> = snap.docs.map(
-      (doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }),
-    );
-
-    const filtered = rows.filter((row) => {
-        if (!q) {
-          return true;
-        }
-
-        const name = String(row.nombreCompleto ?? "").toLowerCase();
-        const ci = String(row.ci ?? "").toLowerCase();
-        return name.includes(q) || ci.includes(q);
-      });
-
-    const ordered = filtered.sort((a, b) =>
-      String(a.nombreCompleto ?? "").localeCompare(String(b.nombreCompleto ?? ""), "es", {
-        sensitivity: "base",
-      }),
-    );
-
-    const data = ordered.slice(0, limit).map((row) => {
-      const isActorUnit = String(row.unidadId ?? "") === actor.unidadId;
-      const isUnitScoped = USER_ROLES_UNIT_SCOPE.has(actor.role);
-
-      if (!isUnitScoped || isActorUnit) {
-        return {
-          ...row,
-          transferRequired: false,
-          canTransferToMyUnit: false,
-          canTransferToAnyUnit: USER_ROLES_GLOBAL.has(actor.role),
-        };
-      }
-
-      return {
-        id: row.id,
-        ci: row.ci,
-        grado: row.grado,
-        nombreCompleto: row.nombreCompleto,
-        unidadId: row.unidadId,
-        unidadNombre: row.unidadNombre,
-        estado: row.estado,
-        transferRequired: true,
-        canTransferToMyUnit: canManageTransfers(actor.role),
-        canTransferToAnyUnit: USER_ROLES_GLOBAL.has(actor.role),
-      };
-    });
-
-    return NextResponse.json({ data }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "No se pudo listar personal" }, { status: 500 });
-  }
+    const rows = people.filter(d=>d.exists).map(d=>({ ...d.data(), id: d.id } as Record<string, unknown> & {id:string})).filter(r=>matchesPersonalSearch(r,q)).sort((a,b)=>String(a.nombreCompleto).localeCompare(String(b.nombreCompleto),"es"));
+    const limit = Math.min(300, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 50));
+    const offset = Math.max(0, Number(request.nextUrl.searchParams.get("offset")) || 0);
+    const data = rows.slice(offset,offset+limit).map(r=>({id:r.id,ci:r.ci,grado:r.grado,nombres:r.nombres,apellidos:r.apellidos,nombreCompleto:r.nombreCompleto,sexo:r.sexo,estado:r.estado,transferRequired:false}));
+    return NextResponse.json({data,total:rows.length,nextOffset:offset+limit<rows.length?offset+limit:null});
+  } catch { return NextResponse.json({error:"No se pudo consultar el padrón"},{status:500}); }
 }
 
 export async function POST(request: NextRequest) {
@@ -154,8 +98,6 @@ export async function POST(request: NextRequest) {
         apellidos: input.apellidos,
         nombreCompleto: fullName,
         sexo: input.sexo,
-        unidadId: input.unidadId,
-        unidadNombre: input.unidadNombre,
         estado: input.estado,
         createdAt: now,
         updatedAt: now,
@@ -174,7 +116,7 @@ export async function POST(request: NextRequest) {
         action: "create_personal",
         entity: "personal",
         entityId: personalRef.id,
-        unidadId: input.unidadId,
+        unidadId: null,
         before: null,
         after: payload,
         createdAt: now,

@@ -29,9 +29,16 @@ export function formatArticleShort(value?: string | null): string {
   return value.split(" - ")[0] || value;
 }
 
+export function formatDisciplinaryDate(value?: string | null): string {
+  if (!value) return "No registrada";
+  const day = String(value).slice(0, 10);
+  const match = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : day;
+}
+
 export function formatReincidenciaOrigin(origin: ReincidenciaOrigenView): string {
   if (!origin?.articuloBase || !origin?.incisoBase) {
-    return "Origen: no registrado";
+    return "Sanción anterior relacionada: no registrada";
   }
 
   const base = `${formatArticleShort(origin.articuloBase)} ${formatIncisoShort(origin.incisoBase)}`;
@@ -39,14 +46,14 @@ export function formatReincidenciaOrigin(origin: ReincidenciaOrigenView): string
     ? ` por ${formatArticleShort(origin.origenReincidenciaPrevia.articuloBase)} ${formatIncisoShort(origin.origenReincidenciaPrevia.incisoBase)}`
     : "";
   const refParts = [
-    origin.memorandumReferencia ? `Memo origen ${origin.memorandumReferencia}` : null,
-    origin.fechaSancionReferencia ? `Fecha origen ${String(origin.fechaSancionReferencia).slice(0, 10)}` : null,
-    origin.unidadReferenciaNombre ? `Unidad origen: ${origin.unidadReferenciaNombre}` : null,
+    origin.memorandumReferencia ? `Documento: ${origin.memorandumReferencia}` : null,
+    origin.fechaSancionReferencia ? `Fecha: ${formatDisciplinaryDate(origin.fechaSancionReferencia)}` : null,
+    origin.unidadReferenciaNombre ? `Unidad que la registró: ${origin.unidadReferenciaNombre}` : null,
   ].filter(Boolean);
 
   return refParts.length > 0
-    ? `Origen: ${base}${previous} (${refParts.join(" | ")})`
-    : `Origen: ${base}${previous}`;
+    ? `Sanción anterior relacionada: ${base}${previous} (${refParts.join(" | ")})`
+    : `Sanción anterior relacionada: ${base}${previous}`;
 }
 
 export function formatFaltaOrigenOption(row: ReincidenciaFormatRow): string {

@@ -1,3 +1,5 @@
+import { persistAccess } from "@/lib/server/user-access";
+import { OperationError, operationError } from "@/lib/server/operations";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -76,11 +78,10 @@ export async function POST(request: NextRequest) {
     try {
       const existingAuthUser = await auth.getUserByEmail(incomingEmail);
       incomingUid = existingAuthUser.uid;
-      await auth.updateUser(incomingUid, {
-        displayName: incomingDisplayName || existingAuthUser.displayName || undefined,
-        disabled: false,
-      });
-    } catch {
+      const existingProfile = (await db.collection("users").doc(incomingUid).get()).data();
+      if (!existingProfile || !UNIT_ROLES.has(existingProfile.role)) return forbidden("El entrante debe tener un perfil de unidad; no se pueden relevar cuentas departamentales");
+    } catch (error) {
+      if ((error?.constructor && (error as {code?:string}).code) !== "auth/user-not-found") throw error;
       if (temporaryPassword.length < 8) {
         return badRequest("La contrasena temporal del entrante es requerida si la cuenta no existe");
       }
@@ -88,9 +89,13 @@ export async function POST(request: NextRequest) {
         email: incomingEmail,
         password: temporaryPassword,
         displayName: incomingDisplayName || undefined,
+        disabled: true,
       });
       incomingUid = created.uid;
       incomingWasCreated = true;
+      // A failed handover can be retried: the newly created Auth account stays
+      // disabled and has a non-operative profile instead of an orphan login.
+      await db.collection("users").doc(incomingUid).set({ email: incomingEmail, role, unidadId, unidadNombre, status: "bloqueado", isActive: false, mustChangePassword: true, createdAt: Timestamp.now() });
     }
 
     const outgoingCandidates = await db
@@ -102,97 +107,24 @@ export async function POST(request: NextRequest) {
       .get();
 
     const outgoingDoc = outgoingCandidates.docs.find((doc) => doc.id !== incomingUid) ?? null;
-    const outgoingUid = outgoingDoc?.id ?? null;
+    const previousIncoming = (await db.collection("users").doc(incomingUid).get()).data();
+    const outgoingUid = outgoingDoc?.id ?? (previousIncoming?.handoverPending ? previousIncoming.replacesUid ?? null : null);
 
     const incomingRef = db.collection("users").doc(incomingUid);
-    const outgoingRef = outgoingUid ? db.collection("users").doc(outgoingUid) : null;
-    const auditRef = db.collection("audit_logs").doc();
     const now = Timestamp.now();
 
-    const result = await db.runTransaction(async (tx) => {
-      const incomingSnap = await tx.get(incomingRef);
-      const outgoingSnap = outgoingRef ? await tx.get(outgoingRef) : null;
-
-      const beforeIncoming = incomingSnap.exists ? incomingSnap.data() : null;
-      const beforeOutgoing = outgoingSnap?.exists ? outgoingSnap.data() : null;
-
-      const incomingPayload = {
-        email: incomingEmail,
-        displayName: incomingDisplayName,
-        grado: incomingRango.gradoFinal,
-        nombres: incomingNombres,
-        apellidos: incomingApellidos,
-        nombreCompleto: incomingNombreCompleto,
-        role,
-        unidadId,
-        unidadNombre,
-        status: "activo",
-        isActive: true,
-        mustChangePassword: incomingWasCreated ? true : (beforeIncoming?.mustChangePassword ?? false),
-        passwordChangedAt: incomingWasCreated ? null : (beforeIncoming?.passwordChangedAt ?? null),
-        createdByAdmin: incomingWasCreated ? true : (beforeIncoming?.createdByAdmin ?? false),
-        replacedByUid: null,
-        replacesUid: outgoingUid,
-        blockedAt: null,
-        blockedBy: null,
-        blockedReason: null,
-        lastRoleAssignmentAt: now,
-        updatedAt: now,
-        createdAt: beforeIncoming?.createdAt ?? now,
-      };
-
-      tx.set(incomingRef, incomingPayload, { merge: true });
-
-      let outgoingAfter = null;
-      if (outgoingRef && beforeOutgoing) {
-        outgoingAfter = {
-          ...beforeOutgoing,
-          status: "bloqueado",
-          isActive: false,
-          blockedAt: now,
-          blockedBy: {
-            uid: actor.uid,
-            email: actor.email,
-            role: actor.role,
-          },
-          blockedReason: reason,
-          replacedByUid: incomingUid,
-          updatedAt: now,
-        };
-        tx.update(outgoingRef, outgoingAfter);
-      }
-
-      tx.set(auditRef, {
-        actorUid: actor.uid,
-        actorEmail: actor.email,
-        actorRole: actor.role,
-        action: "unit_role_handover",
-        entity: "user",
-        entityId: incomingUid,
-        unidadId,
-        before: {
-          incoming: beforeIncoming,
-          outgoing: beforeOutgoing,
-        },
-        after: {
-          incoming: incomingPayload,
-          outgoing: outgoingAfter,
-        },
-        metadata: {
-          reason,
-          role,
-          incomingEmail,
-          incomingGrado: incomingRango.gradoFinal,
-          incomingNombres,
-          incomingApellidos,
-          outgoingUid,
-          incomingUid,
-        },
-        createdAt: now,
-      });
-
-      return { incomingUid, outgoingUid, auditId: auditRef.id };
-    });
+    const beforeIncoming = (await incomingRef.get()).data();
+    const incomingPayload = {
+      email: incomingEmail, displayName: incomingDisplayName,
+      grado: incomingRango.gradoFinal, nombres: incomingNombres, apellidos: incomingApellidos,
+      nombreCompleto: incomingNombreCompleto, role, unidadId, unidadNombre,
+      status: "relevo_pendiente", isActive: false, handoverPending: true,
+      mustChangePassword: incomingWasCreated ? true : (beforeIncoming?.mustChangePassword ?? false),
+      replacesUid: outgoingUid, replacedByUid: null, blockedAt: null,
+      lastRoleAssignmentAt: now, updatedAt: now, createdAt: beforeIncoming?.createdAt ?? now,
+    };
+    const saved = await persistAccess(actor, incomingUid, incomingPayload, { create: !beforeIncoming, outgoingUid, reason });
+    const result = { incomingUid, outgoingUid, auditId: saved.auditId };
 
     if (result.outgoingUid) {
       await auth.updateUser(result.outgoingUid, { disabled: true });
@@ -201,9 +133,11 @@ export async function POST(request: NextRequest) {
 
     await auth.updateUser(result.incomingUid, { disabled: false });
     await auth.revokeRefreshTokens(result.incomingUid);
+    await persistAccess(actor, incomingUid, { status: "activo", isActive: true, handoverPending: false, updatedAt: Timestamp.now() });
 
     return NextResponse.json({ ok: true, ...result }, { status: 200 });
   } catch (error) {
+    if (error instanceof OperationError) return operationError(error);
     return NextResponse.json(
       {
         error: "No se pudo ejecutar el relevo de usuario",

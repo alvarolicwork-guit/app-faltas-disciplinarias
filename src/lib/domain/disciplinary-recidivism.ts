@@ -43,7 +43,7 @@ export function getArticulosBaseForSancionEscalada(articulo: string, inciso: str
 
   const art = articleNumber(articulo);
   if (art === 10) return [getArticleLabel(9)];
-  if (art === 11) return [getArticleLabel(10), getArticleLabel(9)];
+  if (art === 11) return [getArticleLabel(10)];
   if (art === 12) return [getArticleLabel(11)];
   return [];
 }

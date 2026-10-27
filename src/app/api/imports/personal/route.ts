@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth/request-user";
 import { canBulkImportPersonal } from "@/lib/domain/roles";
 import { resolveRangoPolicial } from "@/lib/domain/rangos-policiales";
-import { ciKey, normalizeCi, normalizePersonName, toTitleCaseEs } from "@/lib/domain/text-normalization";
+import { ciKey, normalizeCi, normalizePersonName } from "@/lib/domain/text-normalization";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { assertCurrentActor } from "@/lib/server/operations";
 
 const REQUIRED_FIELDS = ["ci", "grado", "nombres", "apellidos", "sexo"];
 
@@ -62,25 +63,16 @@ export async function POST(request: NextRequest) {
 
     if (!isGlobalImport) {
       return NextResponse.json(
-        { error: "Solo se permite importación global. Use unidadId=GLOBAL y columna codigo_unidad." },
+        { error: "Solo se permite importación global. Use unidadId=GLOBAL." },
         { status: 400 },
       );
     }
 
     const db = getAdminDb();
-    const unidadesSnap = await db.collection("unidades").where("estado", "==", "activa").get();
-    const unidadesMap = new Map<string, { id: string; nombre: string }>();
-    unidadesSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      const id = String(data.id ?? doc.id).trim();
-      const nombre = toTitleCaseEs(String(data.nombre ?? "").trim());
-      if (id) unidadesMap.set(id, { id, nombre });
-    });
     const errors: ImportError[] = [];
     let okRows = 0;
     let createdRows = 0;
     let updatedRows = 0;
-    const BATCH_SIZE = 400;
 
     const existingSnap = await db.collection("personal").get();
     const existingByCi = new Map<string, { id: string; data: Record<string, unknown> }>();
@@ -90,46 +82,19 @@ export async function POST(request: NextRequest) {
     });
 
     const seenInFile = new Set<string>();
-    let batch = db.batch();
-    let batchCount = 0;
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
-      const targetUnidadId = isGlobalImport
-        ? String(row.codigo_unidad ?? row.unidadid ?? row.unidadId ?? "").trim()
-        : unidadId;
-      const unidadOficial = unidadesMap.get(targetUnidadId);
-
       // Validate required fields
       let hasError = false;
       for (const field of REQUIRED_FIELDS) {
-        if (!row[field]?.trim()) {
+        if (!String(row[field] ?? "").trim()) {
           errors.push({ row: rowNum, field, message: `${field} es requerido`, value: String(row[field] ?? "") });
           hasError = true;
         }
       }
       if (hasError) continue;
-
-      if (!targetUnidadId) {
-        errors.push({ row: rowNum, field: "codigo_unidad", message: "codigo_unidad es requerido en importacion global", value: "" });
-        continue;
-      }
-
-      if (!unidadOficial) {
-        errors.push({ row: rowNum, field: "codigo_unidad", message: `Unidad no valida: ${targetUnidadId}`, value: targetUnidadId });
-        continue;
-      }
-
-      if (!unidadOficial.nombre) {
-        errors.push({
-          row: rowNum,
-          field: "codigo_unidad",
-          message: `La unidad ${targetUnidadId} no tiene nombre configurado en catálogo`,
-          value: targetUnidadId,
-        });
-        continue;
-      }
 
       const ci = normalizeCi(String(row.ci ?? ""));
       if (!ci) {
@@ -187,52 +152,31 @@ export async function POST(request: NextRequest) {
         apellidos,
         nombreCompleto: fullName,
         sexo,
-        unidadId: targetUnidadId,
-        unidadNombre: unidadOficial.nombre,
         estado,
         updatedAt: Timestamp.now(),
       };
 
-      if (existing) {
-        const before = existing.data;
-        batch.update(ref, payload);
-        batch.set(db.collection("audit_logs").doc(), {
-          actorUid: actor.uid,
-          actorEmail: actor.email,
-          actorRole: actor.role,
-          action: "update_personal_by_import",
-          entity: "personal",
-          entityId: existing.id,
-          unidadId: targetUnidadId,
-          before,
-          after: { ...before, ...payload },
-          createdAt: Timestamp.now(),
-        });
-        updatedRows++;
-      } else {
-        batch.set(ref, { ...payload, createdAt: Timestamp.now() });
-        batch.set(db.collection("ci_registry").doc(ciFileKey), {
-          ci,
-          personalId: ref.id,
-          createdAt: Timestamp.now(),
-        });
-        createdRows++;
-      }
+      const created = await db.runTransaction(async tx => {
+        await assertCurrentActor(tx, db, actor);
+        const registryRef = db.collection("ci_registry").doc(ciFileKey);
+        const registry = await tx.get(registryRef);
+        const matches = await tx.get(db.collection("personal").where("ci", "==", ci));
+        if (matches.size > 1) throw new Error("CI duplicado: requiere revisión del padrón");
+        const registeredId = registry.data()?.personalId;
+        const target = db.collection("personal").doc(registeredId || matches.docs[0]?.id || ref.id);
+        const before = await tx.get(target);
+        if (registeredId && !before.exists && !matches.empty) throw new Error("Registro de identidad inconsistente");
+        tx.set(target, { ...payload, createdAt: before.data()?.createdAt ?? Timestamp.now() }, { merge: true });
+        tx.set(registryRef, { ci, personalId: target.id, createdAt: registry.data()?.createdAt ?? Timestamp.now() });
+        tx.set(db.collection("audit_logs").doc(), { actorUid: actor.uid, actorRole: actor.role, action: "import_personal", entity: "personal", entityId: target.id, before: before.data() ?? null, after: payload, createdAt: Timestamp.now() });
+        return !before.exists;
+      });
+      if (created) createdRows++; else updatedRows++;
 
       existingByCi.set(ci, { id: ref.id, data: payload as unknown as Record<string, unknown> });
-      batchCount++;
       okRows++;
-
-      if (batchCount >= BATCH_SIZE) {
-        await batch.commit();
-        batch = db.batch();
-        batchCount = 0;
-      }
     }
 
-    if (batchCount > 0) {
-      await batch.commit();
-    }
 
     // Log the import
     const importLogRef = await db.collection("imports_personal").add({
@@ -254,101 +198,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function deleteCollectionByBatches(
-  db: ReturnType<typeof getAdminDb>,
-  collectionName: string,
-  batchSize = 300,
-): Promise<number> {
-  let deleted = 0;
-
-  while (true) {
-    const snap = await db.collection(collectionName).limit(batchSize).get();
-    if (snap.empty) break;
-
-    const batch = db.batch();
-    snap.docs.forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
-    deleted += snap.size;
-
-    if (snap.size < batchSize) break;
-  }
-
-  return deleted;
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const actor = await getRequestUser(request);
-    if (!actor) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
-    const canReset = actor.role === "super_admin";
-    if (!canReset) {
-      return NextResponse.json(
-        { error: "Solo super_admin puede ejecutar la eliminación masiva" },
-        { status: 403 },
-      );
-    }
-
-    const body = await request.json().catch(() => ({}));
-    const confirmation = String(body?.confirmation ?? "").trim();
-    const reason = toTitleCaseEs(String(body?.reason ?? "").trim());
-    const scope = String(body?.scope ?? "").trim();
-
-    if (confirmation !== "ELIMINAR TODO") {
-      return NextResponse.json(
-        { error: "Confirmación inválida. Envíe confirmation='ELIMINAR TODO'" },
-        { status: 400 },
-      );
-    }
-
-    if (scope !== "personal_import_reset") {
-      return NextResponse.json(
-        { error: "Scope inválido. Envíe scope='personal_import_reset'" },
-        { status: 400 },
-      );
-    }
-
-    if (reason.length < 10) {
-      return NextResponse.json(
-        { error: "Debe registrar un motivo de al menos 10 caracteres" },
-        { status: 400 },
-      );
-    }
-
-    const db = getAdminDb();
-
-    const deletedPersonal = await deleteCollectionByBatches(db, "personal");
-    const deletedRegistry = await deleteCollectionByBatches(db, "ci_registry");
-    const deletedImports = await deleteCollectionByBatches(db, "imports_personal");
-
-    await db.collection("audit_logs").add({
-      actorUid: actor.uid,
-      actorEmail: actor.email,
-      actorRole: actor.role,
-      action: "reset_personal_import_data",
-      entity: "personal",
-      entityId: "bulk-delete",
-      before: {
-        deletedPersonal,
-        deletedRegistry,
-        deletedImports,
-        reason,
-        scope,
-      },
-      after: null,
-      createdAt: Timestamp.now(),
-    });
-
-    return NextResponse.json(
-      {
-        ok: true,
-        deletedPersonal,
-        deletedRegistry,
-        deletedImports,
-      },
-      { status: 200 },
-    );
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "No se pudo resetear la base" }, { status: 500 });
-  }
-}
+export async function DELETE() { return NextResponse.json({ error: "El padrón no puede borrarse: conserva la identidad del historial. Importe para actualizar por CI." }, {status:410}); }

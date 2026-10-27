@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { POST as registerConfirmedSanction } from "@/app/api/faltas/route";
 
 import {
   articleNumber,
@@ -88,6 +89,18 @@ export async function POST(request: NextRequest) {
     return json(400, { ok: false, code: "INVALID_JSON", message: "JSON invalido" });
   }
 
+  // A service signature alone does not replace the registrar's session and
+  // explicit confirmation. Delegate the new transport to the same workflow.
+  if (body && typeof body === "object") {
+    const envelope = body as Record<string, unknown>;
+    if (!envelope.sancion || typeof envelope.sancion !== "object") {
+      return json(426, { code: "WORKFLOW_UPGRADE_REQUIRED", message: "La integración requiere sancion con confirmación explícita y sesión del registrador. El contrato anterior no permite registrar sin autor confirmado." });
+    }
+    return registerConfirmedSanction(new NextRequest(new URL("/api/faltas", request.url), {
+      method: "POST", headers: { "Content-Type": "application/json", authorization: request.headers.get("authorization") ?? "" },
+      body: JSON.stringify(envelope.sancion),
+    }));
+  }
   const parsed = integrationSancionSchema.safeParse(body);
   if (!parsed.success) {
     return json(400, {

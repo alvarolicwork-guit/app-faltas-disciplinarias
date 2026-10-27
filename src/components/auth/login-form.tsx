@@ -64,8 +64,16 @@ export function LoginForm() {
 
         {/* Login card */}
         <div className="bg-white rounded-2xl border border-[var(--border)] shadow-lg p-6 md:p-8">
-          <h2 className="text-lg font-bold text-[var(--navy-900)] mb-1">Ingreso institucional</h2>
+          <h2 className="text-lg font-bold text-[var(--navy-900)] mb-1">{process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATORS === "true" && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === "demo-app-faltas" ? "Ingreso de prueba local" : "Ingreso institucional"}</h2>
           <p className="text-sm text-[var(--navy-500)] mb-6">Ingrese con las credenciales asignadas por su administrador.</p>
+          {process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATORS === "true" && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === "demo-app-faltas" && (
+            <div role="note" className="rounded-xl border border-[var(--info-100)] bg-[var(--info-50)] p-4 mb-5 text-sm space-y-2">
+              <p className="font-semibold">Entorno local con datos ficticios</p>
+              <p>Las cuentas del sistema publicado no están disponibles en este entorno. Utilice una cuenta de prueba:</p>
+              <p><strong>Superadministrador:</strong> super@demo.local<br/><strong>Registrador de Unidad Uno:</strong> unidad1@demo.local<br/><strong>Administrador departamental:</strong> dpto@demo.local</p>
+              <p><strong>Contraseña de prueba:</strong> <code>PruebaLocal2026!</code></p>
+            </div>
+          )}
 
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             <Input

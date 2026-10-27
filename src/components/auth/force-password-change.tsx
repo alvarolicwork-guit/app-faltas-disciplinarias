@@ -4,7 +4,6 @@ import { FormEvent, useState } from "react";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
-  updatePassword,
 } from "firebase/auth";
 
 import { Button } from "@/components/ui/button";
@@ -45,8 +44,8 @@ export function ForcePasswordChange() {
     try {
       const credential = EmailAuthProvider.credential(firebaseUser.email, currentPassword);
       await reauthenticateWithCredential(firebaseUser, credential);
-      await updatePassword(firebaseUser, newPassword);
-      await post("/api/users/password-change", {});
+      await firebaseUser.getIdToken(true);
+      await post("/api/users/password-change", { newPassword });
       await refreshSession();
     } catch {
       setError("No se pudo cambiar la contrasena. Verifique la contrasena temporal e intente nuevamente.");

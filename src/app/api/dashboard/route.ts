@@ -1,8 +1,11 @@
+import { isReincidenciaEscalada } from "@/lib/domain/disciplinary-recidivism";
+import { annotateSanctions, statisticsByConduct } from "@/lib/server/chain-views";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
 import { USER_ROLES_UNIT_SCOPE } from "@/lib/domain/constants";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { pendingRequest, requestDeadline } from "@/lib/domain/sanction-policy";
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const faltasSnap = await faltasQuery.get();
-    const allFaltas = faltasSnap.docs.map((d) => d.data());
+    const allFaltas = await annotateSanctions(db,faltasSnap.docs.map(d=>({...d.data(),id:d.id})));
 
     // Total
     const totalFaltas = allFaltas.length;
@@ -43,6 +46,18 @@ export async function GET(request: NextRequest) {
     }
     const reincidenciasSnap = await reincidenciasQuery.orderBy("createdAt", "desc").count().get();
     const reincidenciasBloqueadas = reincidenciasSnap.data().count;
+
+    const canResolveRequests = ["admin_dpto", "super_admin"].includes(actor.role);
+    let pendingSummary: { solicitudesCancelacionPendientes: number; proximaSolicitudVenceAt: string | null } | undefined;
+    if (canResolveRequests) {
+      let requestsQuery = db.collection("solicitudes_eliminacion_falta").where("estado", "==", "pendiente");
+      if (scopedUnidadId) requestsQuery = requestsQuery.where("solicitanteUnidadId", "==", scopedUnidadId);
+      const requests = await requestsQuery.get();
+      const checkedAt = Date.now();
+      const pending = requests.docs.map(d => d.data()).filter(row => pendingRequest(row, checkedAt));
+      const deadlines = pending.map(requestDeadline).filter((date): date is number => date !== null);
+      pendingSummary = { solicitudesCancelacionPendientes: pending.length, proximaSolicitudVenceAt: deadlines.length ? new Date(Math.min(...deadlines)).toISOString() : null };
+    }
 
     // Active Units Count
     const unidadesSnap = await db.collection("unidades").where("estado", "==", "activa").count().get();
@@ -72,12 +87,19 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({
+      ...pendingSummary,
       totalFaltas,
+      personasSancionadas:new Set(allFaltas.map(f=>f.personalId)).size,
       faltasMes,
       reincidencias: reincidenciasBloqueadas,
       reincidenciasBloqueadas,
+      sancionesPorReincidencia:allFaltas.filter(f=>isReincidenciaEscalada(String(f.articulo),String(f.inciso))).length,
+      personasConReincidencia:new Set(allFaltas.filter(f=>isReincidenciaEscalada(String(f.articulo),String(f.inciso))).map(f=>f.personalId)).size,
+      cadenasVencidas:new Set(allFaltas.filter(f=>f.estadoPlazoCadena==="vencida").map(f=>f.cadenaId)).size,
+      cadenasRequierenRevision:allFaltas.filter(f=>f.estadoPlazoCadena==="requiere_revision").length,
       unidadesActivas,
       porArticulo,
+      porConducta:statisticsByConduct(allFaltas),
       recientes,
     });
   } catch {

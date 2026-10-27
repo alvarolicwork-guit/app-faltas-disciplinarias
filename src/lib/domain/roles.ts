@@ -11,7 +11,7 @@ export function canReadGlobalInfo(role: string): boolean {
 }
 
 export function canViewGlobalPersonHistory(role: string): boolean {
-  return role === "visor_dpto" || role === "super_admin";
+  return role === "visor_dpto" || role === "admin_dpto" || role === "super_admin";
 }
 
 export function isSuperAdmin(role: string): boolean {

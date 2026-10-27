@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,3 +13,7 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
 
 export const clientAuth = getAuth(app);
+if (process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATORS === "true") {
+  if (!firebaseConfig.projectId?.startsWith("demo-")) throw new Error("El emulador requiere un proyecto demo-");
+  if (!clientAuth.emulatorConfig) connectAuthEmulator(clientAuth, "http://127.0.0.1:9097", { disableWarnings: true });
+}

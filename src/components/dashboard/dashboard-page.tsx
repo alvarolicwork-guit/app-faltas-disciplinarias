@@ -14,58 +14,84 @@ type DashboardStats = {
   faltasMes: number;
   reincidencias: number;
   reincidenciasBloqueadas?: number;
+  solicitudesCancelacionPendientes?: number;
+  proximaSolicitudVenceAt?: string | null;
+  sancionesPorReincidencia?:number;
+  personasConReincidencia?:number;
+  personasSancionadas?:number;
+  cadenasRequierenRevision?:number;
   unidadesActivas: number;
   porArticulo: { articulo: string; count: number }[];
   recientes: { id: string; nombreCompleto: string; articulo: string; fechaSancion: string; unidadSancionNombre: string }[];
 };
 
-export function DashboardPage() {
+export function DashboardPage({ onOpenRequests }: { onOpenRequests: () => void }) {
   const { get } = useApi();
   const { sessionUser } = useAuth();
   const { fetchWithCache } = useDataCache();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const { unidades } = useUnidades();
 
   const isGlobal = canReadGlobalInfo(sessionUser?.role ?? "");
+  const canResolveRequests = ["admin_dpto", "super_admin"].includes(sessionUser?.role ?? "");
   const unitId = sessionUser?.unidadId ?? "";
+  const actorKey = `${sessionUser?.uid}:${sessionUser?.role}:${unitId}`;
 
-  const fetchStats = useCallback(async (options?: { force?: boolean }) => {
-    setLoading(true);
+  const fetchStats = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const params = unitId && !isGlobal ? `?unidadId=${unitId}` : "";
-      const cacheKey = `dashboard:${isGlobal ? "global" : unitId || "sin-unidad"}`;
-      const result = await fetchWithCache(
+      const cacheKey = `dashboard:${actorKey}:${isGlobal ? "global" : unitId || "sin-unidad"}`;
+      let result = await fetchWithCache(
         cacheKey,
         () => get<DashboardStats>(`/api/dashboard${params}`),
-        { ttlMs: 2 * 60 * 1000, force: options?.force },
+        { ttlMs: canResolveRequests ? 60 * 1000 : 2 * 60 * 1000, force: options?.force },
       );
+      if (canResolveRequests && result.cached && result.data.proximaSolicitudVenceAt && Date.parse(result.data.proximaSolicitudVenceAt) <= Date.now()) {
+        result = await fetchWithCache(cacheKey, () => get<DashboardStats>(`/api/dashboard${params}`), { force: true });
+      }
       setStats(result.data);
       setLastUpdatedAt(result.storedAt);
+      setLoadError(false);
     } catch {
-      /* silent */
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [fetchWithCache, get, unitId, isGlobal]);
+  }, [fetchWithCache, get, unitId, isGlobal, actorKey, canResolveRequests]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchStats();
   }, [fetchStats]);
 
+  useEffect(() => {
+    if (!canResolveRequests) return;
+    const refresh = () => { void fetchStats({ force: true, silent: true }); };
+    const interval = window.setInterval(refresh, 60_000);
+    const expiry = stats?.proximaSolicitudVenceAt ? Date.parse(stats.proximaSolicitudVenceAt) : null;
+    const timeout = expiry !== null && expiry > Date.now() ? window.setTimeout(refresh, Math.min(expiry - Date.now() + 50, 2_147_483_647)) : null;
+    return () => { window.clearInterval(interval); if (timeout !== null) window.clearTimeout(timeout); };
+  }, [canResolveRequests, fetchStats, stats?.proximaSolicitudVenceAt]);
+
   if (loading) return <DashboardSkeleton />;
 
   const kpis = [
     { label: "Total Sanciones", value: stats?.totalFaltas ?? 0, icon: Icons.fileText, color: "from-[var(--navy-700)] to-[var(--navy-900)]", textColor: "text-white" },
     { label: "Este Mes", value: stats?.faltasMes ?? 0, icon: Icons.calendar, color: "from-[var(--gold-400)] to-[var(--gold-600)]", textColor: "text-[var(--navy-900)]" },
-    { label: "Reincidencias Bloqueadas", value: stats?.reincidenciasBloqueadas ?? stats?.reincidencias ?? 0, icon: Icons.alertTriangle, color: "from-[var(--danger-500)] to-red-700", textColor: "text-white" },
-    { label: isGlobal ? "Unidades Activas" : "Personal", value: isGlobal ? (stats?.unidadesActivas ?? 0) : (stats?.totalFaltas ?? 0), icon: Icons.building, color: "from-[var(--info-500)] to-blue-700", textColor: "text-white" },
+    canResolveRequests
+      ? { label: "Solicitudes de cancelación pendientes", value: stats?.solicitudesCancelacionPendientes ?? "—", icon: Icons.clipboard, color: stats?.solicitudesCancelacionPendientes ? "from-[var(--danger-500)] to-red-700" : "from-[var(--navy-700)] to-[var(--navy-900)]", textColor: "text-white", action: onOpenRequests }
+      : { label: "Reincidencias registradas", value: stats?.sancionesPorReincidencia ?? "—", icon: Icons.fileText, color: "from-[var(--info-500)] to-blue-700", textColor: "text-white" },
+    { label: isGlobal ? "Unidades Activas" : "Personal sancionado", value: isGlobal ? (stats?.unidadesActivas ?? 0) : (stats?.personasSancionadas ?? 0), icon: Icons.building, color: "from-[var(--info-500)] to-blue-700", textColor: "text-white" },
   ];
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {loadError && <p role="alert" className="text-red-700">No se pudieron actualizar los contadores. {stats ? "Se muestran los últimos datos consultados." : "Pulse Actualizar para volver a consultar."}</p>}
+      <p className="text-sm">{canResolveRequests && <>Reincidencias registradas: {stats?.sancionesPorReincidencia ?? "—"}. </>}Personas con reincidencia: {stats?.personasConReincidencia ?? "—"}.</p>
       <div className="flex justify-end">
         <Button
           variant="outline"
@@ -80,8 +106,8 @@ export function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger-children">
-        {kpis.map((kpi) => (
-          <div key={kpi.label} className={`rounded-2xl bg-gradient-to-br ${kpi.color} p-4 md:p-5 shadow-md`}>
+        {kpis.map((kpi) => {
+          const content = <>
             <div className="flex items-start justify-between">
               <div>
                 <p className={`text-xs font-medium ${kpi.textColor} opacity-80`}>{kpi.label}</p>
@@ -89,8 +115,13 @@ export function DashboardPage() {
               </div>
               <div className={`${kpi.textColor} opacity-30`}>{kpi.icon({ size: 28 })}</div>
             </div>
-          </div>
-        ))}
+            {kpi.action && <p className="mt-2 text-xs text-white/90">Ver solicitudes pendientes →</p>}
+          </>;
+          const className = `rounded-2xl bg-gradient-to-br ${kpi.color} p-4 md:p-5 shadow-md`;
+          return kpi.action
+            ? <button key={kpi.label} type="button" onClick={kpi.action} className={`${className} text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--gold-500)] hover:shadow-lg transition-shadow`}>{content}</button>
+            : <div key={kpi.label} className={className}>{content}</div>;
+        })}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">

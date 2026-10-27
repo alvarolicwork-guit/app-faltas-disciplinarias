@@ -2,7 +2,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestUser } from "@/lib/auth/request-user";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +19,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
     }
 
+    const { newPassword } = await request.json();
+    if (typeof newPassword !== "string" || newPassword.length < 8) return NextResponse.json({ error: "Contraseña personal requerida (mínimo ocho caracteres)" }, { status: 400 });
+    if (Date.now()/1000 - actor.token.auth_time > 300) return NextResponse.json({ error: "Vuelva a autenticarse para cambiar su contraseña" }, { status: 403 });
+    await getAdminAuth().updateUser(actor.uid, { password: newPassword });
     const before = userSnap.data();
     const now = Timestamp.now();
     const updates = {

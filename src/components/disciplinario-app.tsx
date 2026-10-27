@@ -14,7 +14,8 @@ import { UsuariosPage } from "@/components/usuarios/usuarios-page";
 import { ImportPage } from "@/components/importacion/import-page";
 import { ReportesPage } from "@/components/reportes/reportes-page";
 import { UnidadesPage } from "@/components/unidades/unidades-page";
-import { TransferenciasPage } from "@/components/transferencias/transferencias-page";
+import { AuditoriaPage } from "@/components/auditoria/auditoria-page";
+import { Notificaciones } from "@/components/notificaciones/notificaciones";
 import { SolicitudesPage } from "@/components/solicitudes/solicitudes-page";
 import { UnidadesProvider } from "@/hooks/use-unidades";
 import { DataCacheProvider } from "@/hooks/use-data-cache";
@@ -44,20 +45,22 @@ function AppRouter() {
   }
 
   const moduleMap: Record<ModuleKey, React.ReactNode> = {
-    dashboard: <DashboardPage />,
+    dashboard: <DashboardPage onOpenRequests={() => setActiveModule("solicitudes")} />,
     registro: <RegistroPage />,
-    personal: <PersonalPage />,
+    personal: <PersonalPage key={`${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId}`} />,
     historial: <HistorialPage />,
     usuarios: <UsuariosPage />,
     unidades: <UnidadesPage />,
     importacion: <ImportPage />,
     reportes: <ReportesPage />,
-    transferencias: <TransferenciasPage />,
+    transferencias: <p>Los traspasos de personal fueron retirados.</p>,
+    auditoria: <AuditoriaPage />,
     solicitudes: <SolicitudesPage />,
   };
 
   return (
     <AppShell activeModule={activeModule} onNavigate={setActiveModule}>
+      <Notificaciones />
       {moduleMap[activeModule]}
     </AppShell>
   );
