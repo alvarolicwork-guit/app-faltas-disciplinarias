@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     for (const d of snap.docs) {
       await expireRequestsForFalta(d.id);
       const found = await db.collection("solicitudes_eliminacion_falta").where("faltaId", "==", d.id).get();
-      requestsById.set(d.id, found.docs.map(r => r.data()));
+      requestsById.set(d.id, found.docs.map(r => ({...r.data(),id:r.id})));
     }
     const data = [];
     for (const d of snap.docs) {

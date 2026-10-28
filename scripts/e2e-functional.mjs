@@ -63,12 +63,12 @@ try {
   const result=await resultPromise;assert.equal(result.status(),201,await result.text());
   const saved=await db.collection('faltas').where('personalId','==','e2e-persona').get();assert.equal(saved.size,1);assert.equal(saved.docs[0].data().unidadId,'u-e2e');
   await page.setViewportSize({width:390,height:844});
-  await page.getByRole('button',{name:'Historial',exact:true}).last().click();
+  await page.getByRole('button',{name:'Sanciones registradas',exact:true}).last().click();
   await page.getByText('Acta-001/2026',{exact:true}).first().waitFor();
   await page.getByText('Sanción registrada',{exact:true}).waitFor({state:'hidden'});
   await page.screenshot({path:path.join(output,'historial-mobile.png'),fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
-  await page.getByRole('button',{name:'Dejar sin efecto',exact:true}).click();
+  await page.getByRole('button',{name:'Solicitar dejar sin efecto',exact:true}).click();
   await page.getByLabel('Nro. de memorandum de representacion').fill('TEST-001/2026');
   await page.getByLabel('Motivo de la representación (obligatorio)').fill('Error ficticio identificado para validar la cancelación');
   const requestResponse=page.waitForResponse(r=>r.url().endsWith('/api/faltas/solicitudes')&&r.request().method()==='POST');
@@ -79,7 +79,7 @@ try {
   await department.getByLabel('Correo electrónico').fill('e2e-dept@example.test');
   await department.getByLabel('Contraseña',{exact:true}).fill('SoloPruebas123');
   await department.getByRole('button',{name:'Iniciar sesión',exact:true}).click();
-  await department.getByRole('button',{name:'Dejar sin Efecto',exact:true}).click();
+  await department.getByRole('button',{name:'Solicitudes de cancelación',exact:true}).click();
   await department.getByRole('button',{name:'Aprobar',exact:true}).click();
   await department.getByLabel('Motivo de aprobación para dejar sin efecto').fill('Error ficticio comprobado en validación');
   const resolution=department.waitForResponse(r=>r.url().includes('/resolver')&&r.request().method()==='PATCH');
@@ -117,7 +117,7 @@ try {
   // A new10/5 base is available when its original chain has expired.
   await page.getByPlaceholder('Buscar por CI, nombre o apellido').fill('12345001');await page.getByRole('button',{name:'Buscar',exact:true}).click();await page.getByRole('button',{name:/Cabo Cadena Vencida/}).click();
   await page.getByLabel('Artículo de la conducta',{exact:true}).selectOption('art10');await page.getByLabel('Inciso de la conducta',{exact:true}).selectOption(catalog[1].incisos[4]);
-  await page.getByText('Se iniciará una nueva cadena desde esta sanción base, con plazo de un año.',{exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Nuevo registro tras finalizar el período anterior',exact:true}).waitFor();
   await page.getByLabel(/Memorándum|Acta/).fill('9022026');await page.getByLabel(/Motivo/).fill('Nueva falta ficticia después de vencer la cadena');
   await page.getByRole('button',{name:/Registrar Sanción/i}).click();await page.getByRole('checkbox',{name:/Confirmo mi intención/}).check();
   const restartedResponse=page.waitForResponse(r=>r.url().endsWith('/api/faltas')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirmar Registro',exact:true}).click();assert.equal((await restartedResponse).status(),201);

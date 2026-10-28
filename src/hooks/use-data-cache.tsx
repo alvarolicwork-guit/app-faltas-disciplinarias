@@ -47,11 +47,13 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
   const { sessionUser } = useAuth();
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
   const userKeyRef = useRef<string | null>(null);
+  const generationRef = useRef(0);
 
   useEffect(() => {
     const nextUserKey = sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId ?? ""}` : null;
     if (userKeyRef.current !== nextUserKey) {
       cacheRef.current.clear();
+      generationRef.current++;
       userKeyRef.current = nextUserKey;
     }
   }, [sessionUser]);
@@ -74,6 +76,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => {
     cacheRef.current.clear();
+    generationRef.current++;
   }, []);
 
   const fetchWithCache = useCallback(async <T,>(
@@ -89,8 +92,9 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
       return { data: cached.data, cached: true, storedAt: cached.storedAt };
     }
 
+    const generation = generationRef.current;
     const data = await fetcher();
-    cacheRef.current.set(key, { data, storedAt: now });
+    if (generation === generationRef.current) cacheRef.current.set(key, { data, storedAt: Date.now() });
     return { data, cached: false, storedAt: now };
   }, []);
 

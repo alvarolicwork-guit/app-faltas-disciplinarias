@@ -4,11 +4,12 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createCancellationRequest, expireRequest } from "@/lib/server/cancellations";
 import { operationError } from "@/lib/server/operations";
 import { requestDeadline } from "@/lib/domain/sanction-policy";
+import { canReadCancellationRequests } from "@/lib/domain/roles";
 export async function GET(request: NextRequest) {
   try {
     const actor = await getRequestUser(request);
     if (!actor) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    if (actor.role === "visor_dpto") return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+    if (!canReadCancellationRequests(actor.role)) return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
     const db = getAdminDb();
     const query = ["admin_dpto", "super_admin"].includes(actor.role) ? db.collection("solicitudes_eliminacion_falta") : db.collection("solicitudes_eliminacion_falta").where("solicitanteUnidadId", "==", actor.unidadId!);
     const snap = await query.get();

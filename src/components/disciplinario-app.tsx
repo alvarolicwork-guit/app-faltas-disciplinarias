@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { canReadCancellationRequests } from "@/lib/domain/roles";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ToastProvider } from "@/hooks/use-toast";
 import { LoginForm } from "@/components/auth/login-form";
@@ -21,9 +22,11 @@ import { UnidadesProvider } from "@/hooks/use-unidades";
 import { DataCacheProvider } from "@/hooks/use-data-cache";
 import { Spinner } from "@/components/ui/primitives";
 
-function AppRouter() {
+function SessionRouter() {
   const { sessionUser, loading } = useAuth();
   const [activeModule, setActiveModule] = useState<ModuleKey>("dashboard");
+  const [selectedRequestId, setSelectedRequestId] = useState<string | undefined>();
+  function openRequests(id?: string) { setSelectedRequestId(id); setActiveModule("solicitudes"); }
 
   if (loading) {
     return (
@@ -45,17 +48,17 @@ function AppRouter() {
   }
 
   const moduleMap: Record<ModuleKey, React.ReactNode> = {
-    dashboard: <DashboardPage onOpenRequests={() => setActiveModule("solicitudes")} />,
+    dashboard: <DashboardPage onOpenRequests={() => openRequests()} />,
     registro: <RegistroPage />,
     personal: <PersonalPage key={`${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId}`} />,
-    historial: <HistorialPage />,
+    historial: <HistorialPage onOpenRequests={openRequests} />,
     usuarios: <UsuariosPage />,
     unidades: <UnidadesPage />,
     importacion: <ImportPage />,
     reportes: <ReportesPage />,
     transferencias: <p>Los traspasos de personal fueron retirados.</p>,
     auditoria: <AuditoriaPage />,
-    solicitudes: <SolicitudesPage />,
+    solicitudes: canReadCancellationRequests(sessionUser.role) ? <SolicitudesPage key={selectedRequestId || "list"} selectedRequestId={selectedRequestId} onFindSanction={() => setActiveModule("historial")} /> : <p role="alert">No tiene permisos para consultar solicitudes.</p>,
   };
 
   return (
@@ -64,6 +67,11 @@ function AppRouter() {
       {moduleMap[activeModule]}
     </AppShell>
   );
+}
+
+function AppRouter() {
+  const { sessionUser } = useAuth();
+  return <SessionRouter key={sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId || ""}` : "sin-sesion"} />;
 }
 
 export function DisciplinarioApp() {

@@ -1,5 +1,6 @@
 "use client";
 
+import { moduleLabel } from "./module-labels";
 import { Icons } from "@/components/ui/icons";
 import { useAuth } from "@/hooks/use-auth";
 import type { ModuleKey } from "./sidebar";
@@ -37,7 +38,7 @@ export function Header({ activeModule, onMenuToggle }: HeaderProps) {
 
       {/* Title */}
       <div className="flex-1 min-w-0">
-        <h1 className="text-lg font-bold text-[var(--navy-900)] truncate">{titles[activeModule]}</h1>
+        <h1 className="text-lg font-bold text-[var(--navy-900)] truncate">{["personal", "historial", "solicitudes"].includes(activeModule) ? moduleLabel(activeModule as "personal" | "historial" | "solicitudes", sessionUser?.role ?? "") : titles[activeModule]}</h1>
         {sessionUser?.unidadNombre && (
           <p className="text-xs text-[var(--navy-400)] truncate lg:hidden">{sessionUser.unidadNombre}</p>
         )}

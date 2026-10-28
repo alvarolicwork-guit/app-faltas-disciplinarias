@@ -30,7 +30,7 @@ export function AppShell({ activeModule, onNavigate, children }: AppShellProps) 
             style={{ animation: "modal-backdrop 0.2s ease-out both" }}
           />
           <div className="relative w-[280px] h-full" style={{ animation: "slide-in-right 0.3s var(--ease-out) both" }}>
-            <Sidebar activeModule={activeModule} onNavigate={(m) => { onNavigate(m); setMobileMenuOpen(false); }} />
+            <Sidebar mobile activeModule={activeModule} onNavigate={(m) => { onNavigate(m); setMobileMenuOpen(false); }} />
           </div>
         </div>
       )}

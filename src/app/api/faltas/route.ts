@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       assertDecisionAvailable(bloqueo);
       if (!matchesDecision(input.articulo, input.inciso, input.reincidenciaOrigen?.faltaReferenciaId ?? null, decision)) {
         const referenceRow = decision.nodes.at(-1);
-        const proposal = publicDecision(decision, bloqueo, decisionVersion);
+        const proposal = publicDecision(decision, bloqueo, decisionVersion, evaluation.habilitacionAntecedentes.rechazosExpresos);
         const blockedPayload = { personalId: input.personalId, unidadIntentoId: unidadSancionId, unidadIntentoNombre: unidadSancionNombre,
           articuloIntentado: input.articulo, incisoIntentado: input.inciso, conductaOrigen: conduct,
           fechaSancionIntentada: fechaSancionTs, estado: "bloqueada", actor: { uid: actor.uid, role: actor.role },
@@ -212,6 +212,7 @@ export async function POST(request: NextRequest) {
         ...(evaluation.skipRegistrationWait ? {pruebaLocalSinEspera:true} : {}),
         confirmacion: { id: confirmation.ref.id, textoVersion: "intencion-v1", fecha: Timestamp.now(), hash: confirmation.data.hash, actorUid: actor.uid },
         ...chainMetadata,
+        habilitacionAntecedentes: evaluation.habilitacionAntecedentes,
         fundamentoOriginal: { ...chainMetadata, articulo: input.articulo, inciso: input.inciso, reincidenciaOrigen },
         personalId: input.personalId,
         unidadId: unidadSancionId,
@@ -463,6 +464,10 @@ export async function GET(request: NextRequest) {
     const rows: Array<Record<string, unknown> & { id: string }> = annotated.map((item) => {
         return {
         ...item,
+        habilitacionAntecedentes: item.habilitacionAntecedentes ? {
+          politica: item.habilitacionAntecedentes.politica,
+          rechazosExpresos: (item.habilitacionAntecedentes.rechazosExpresos ?? []).map((r: {antecedenteId:string;solicitudId:string;resueltaEl:string}) => ({antecedenteId:r.antecedenteId,solicitudId:r.solicitudId,resueltaEl:r.resueltaEl})),
+        } : null,
         puedeSolicitarCancelacion: canRequestCancellation(actor, item, Date.now()),
         puedeCancelarDirectamente: item.estado === "registrada" && (actor.role === "super_admin" || (actor.role === "admin_dpto" && authorUid(item) === actor.uid && cancellationDeadline(item) !== null && Date.now() < cancellationDeadline(item)!)),
         unidadSancionNombre: item.unidadSancionNombre ?? item.unidadNombre ?? null,

@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
     for (const row of previewRows) {
       if (row.normalized?.originRowKey && ["valid", "warning"].includes(row.status)) {
         row.status = "error";
-        row.errors.push({ field: "reincidencia", message: "Importe primero el antecedente; debe cumplir siete días y no tener una solicitud pendiente antes de registrar la reincidencia." });
+        row.errors.push({ field: "reincidencia", message: "Importe primero el antecedente; debe estar habilitado por plazo cumplido o rechazo expreso y no tener una solicitud pendiente antes de registrar la reincidencia." });
       }
     }
 

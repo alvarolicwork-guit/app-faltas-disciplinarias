@@ -63,7 +63,7 @@ export async function recurrenceSnapshot(tx: Transaction, db: Firestore, persona
   const chain = resolveChain(snap.docs.map(d => ({ ...d.data(), id: d.id })), firstId);
   for (const node of chain.nodes) {
     const requests = await tx.get(db.collection("solicitudes_eliminacion_falta").where("faltaId", "==", node.id));
-    const reason = ancestorBlock(node, requests.docs.map(d => d.data()), Date.now(), {skipRegistrationWait:skipLocalRecurrenceWait()});
+    const reason = ancestorBlock(node, requests.docs.map(d => ({...d.data(),id:d.id})), Date.now(), {skipRegistrationWait:skipLocalRecurrenceWait()});
     if (reason) throw new OperationError(reason);
   }
   return snapshotChain(chain.nodes);

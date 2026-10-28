@@ -1,5 +1,5 @@
 import { Firestore, Transaction } from "firebase-admin/firestore";
-import { ancestorBlock } from "@/lib/domain/sanction-policy";
+import { ancestorEligibility, ANCESTOR_POLICY_VERSION, type RejectionEvidence } from "@/lib/domain/sanction-policy";
 import { canonicalConduct, ChainError, dateOnly, evaluateRecurrence, RecurrenceDecision, resolveChain, SanctionRow, snapshotChain, validateSanctionDate } from "@/lib/domain/recurrence-chain";
 import { OperationError, payloadHash } from "./operations";
 import { skipLocalRecurrenceWait } from "./local-test-policy";
@@ -12,19 +12,24 @@ export async function evaluateInTransaction(tx: Transaction, db: Firestore, pers
   const requests: Record<string, unknown>[] = [];
   const skipRegistrationWait = skipLocalRecurrenceWait();
   let bloqueo: string | null = null;
+  const rechazosExpresos: RejectionEvidence[] = [];
+  const now = Date.now();
   for (const node of decision.nodes) {
     const requestsSnap = await tx.get(db.collection("solicitudes_eliminacion_falta").where("faltaId", "==", node.id));
     const nodeRequests = requestsSnap.docs.map(d => ({ ...d.data(), id: d.id }));
     requests.push(...nodeRequests);
-    bloqueo ??= ancestorBlock(node, nodeRequests, Date.now(), {skipRegistrationWait});
+    const eligibility = ancestorEligibility(node, nodeRequests, now, {skipRegistrationWait});
+    bloqueo ??= eligibility.bloqueo;
+    if (eligibility.rechazoExpreso) rechazosExpresos.push(eligibility.rechazoExpreso);
   }
-  const decisionVersion = payloadHash({ rows, requests, date, conducta: decision.conductaOrigen, skipRegistrationWait });
-  return { rows, decision, bloqueo, decisionVersion, skipRegistrationWait };
+  const decisionVersion = payloadHash({ rows, requests, date, conducta: decision.conductaOrigen, skipRegistrationWait, politica: ANCESTOR_POLICY_VERSION });
+  return { rows, decision, bloqueo, decisionVersion, skipRegistrationWait, habilitacionAntecedentes: { politica: ANCESTOR_POLICY_VERSION, rechazosExpresos } };
 }
 
-export function publicDecision(decision: RecurrenceDecision, bloqueo: string | null, decisionVersion: string) {
+export function publicDecision(decision: RecurrenceDecision, bloqueo: string | null, decisionVersion: string, rechazos: RejectionEvidence[] = []) {
   return { tipo: decision.tipo, periodoAnteriorVencido: decision.periodoAnteriorVencido ?? false, conductaOrigen: decision.conductaOrigen, sancion: decision.sancion, antecedenteId: decision.antecedenteId,
-    metadata: decision.metadata, reincidenciaOrigen: snapshotChain(decision.nodes.map(row=>({...row,fechaSancion:dateOnly(row.fechaSancion)}))), bloqueo, disponible: !bloqueo && decision.tipo !== "remision", decisionVersion, pruebaLocalSinEspera: skipLocalRecurrenceWait() };
+    metadata: decision.metadata, reincidenciaOrigen: snapshotChain(decision.nodes.map(row=>({...row,fechaSancion:dateOnly(row.fechaSancion)}))), bloqueo, disponible: !bloqueo && decision.tipo !== "remision", decisionVersion, pruebaLocalSinEspera: skipLocalRecurrenceWait(),
+    antecedentesConfirmados: rechazos.map(r => ({ antecedenteId: r.antecedenteId, resueltaEl: r.resueltaEl, documento: decision.nodes.find(n => n.id === r.antecedenteId)?.memorandum ?? null })) };
 }
 
 export function conductForInput(rows: SanctionRow[], input: { articulo: string; inciso: string; reincidenciaOrigen?: { faltaReferenciaId: string } | null }) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { matchesPersonalSearch } from "./personal-search";
-import { canViewGlobalPersonHistory } from "./roles";
+import { canViewGlobalPersonHistory, canReadCancellationRequests, canResolveCancellationRequests } from "./roles";
 
 test("Búsqueda por CI, tildes, campos incompletos y nombres en distinto orden", () => {
   const person = { ci:"1234567", nombres:"José Luis", apellidos:"Pérez Núñez", nombreCompleto:"Cabo José Luis Pérez Núñez", grado:"Cabo" };
@@ -14,4 +14,19 @@ test("Búsqueda por CI, tildes, campos incompletos y nombres en distinto orden",
 test("Historial departamental permitido a roles de consulta global; unidad denegada", () => {
   for (const role of ["admin_dpto","super_admin","visor_dpto"]) assert.equal(canViewGlobalPersonHistory(role), true);
   for (const role of ["admin_unidad","operador_unidad","desconocido",""]) assert.equal(canViewGlobalPersonHistory(role), false);
+});
+
+test("Seguimiento de solicitudes no concede resolución a roles de unidad", () => {
+  for (const role of ["admin_unidad", "operador_unidad"]) {
+    assert.equal(canReadCancellationRequests(role), true);
+    assert.equal(canResolveCancellationRequests(role), false);
+  }
+  for (const role of ["admin_dpto", "super_admin"]) {
+    assert.equal(canReadCancellationRequests(role), true);
+    assert.equal(canResolveCancellationRequests(role), true);
+  }
+  for (const role of ["visor_dpto", "desconocido", ""]) {
+    assert.equal(canReadCancellationRequests(role), false);
+    assert.equal(canResolveCancellationRequests(role), false);
+  }
 });

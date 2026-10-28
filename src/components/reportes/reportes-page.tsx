@@ -108,9 +108,38 @@ export function ReportesPage() {
 
       {data && !loading && (
         <>
-          <p>Sanciones vigentes por reincidencia: {data.sancionesPorReincidencia??0}. Personas con reincidencia: {data.personasConReincidencia??0}. El vencimiento del plazo no anula sanciones históricas.</p>
           {!!data.cadenasRequierenRevision&&<p role="alert">{data.cadenasRequierenRevision} registros requieren revisión de cadena y no se incluyen en el desglose por conducta original.</p>}
-          {!!data.porConducta?.length && <Card className="p-4 overflow-x-auto"><h3 className="font-semibold mb-2">Sanciones por conducta original</h3><table className="text-sm w-full"><thead><tr><th>Conducta</th><th>Sanciones vigentes</th><th>Por reincidencia</th><th>Personas</th><th>Cadenas históricas</th></tr></thead><tbody>{data.porConducta.map(c=><tr key={c.articulo+c.inciso}><td>{c.articulo.split(" - ")[0]} / {c.inciso}</td><td>{c.sanciones}</td><td>{c.reincidencias}</td><td>{c.personas}</td><td>{c.cadenas}</td></tr>)}</tbody></table></Card>}
+          {!!data.porConducta?.length && (
+            <Card className="p-4">
+              <h3 id="reporte-conductas" className="font-semibold mb-3">Sanciones por conducta original</h3>
+              <div className="overflow-x-auto">
+                <table aria-labelledby="reporte-conductas" className="w-full min-w-[720px] table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[52%]" />
+                    <col className="w-[12%]" span={4} />
+                  </colgroup>
+                  <thead className="bg-[var(--navy-50)] text-[var(--navy-900)]">
+                    <tr>
+                      <th scope="col" className="px-3 py-3 text-left align-middle">Conducta</th>
+                      {["Sanciones vigentes", "Por reincidencia", "Personas", "Cadenas históricas"].map(label => (
+                        <th key={label} scope="col" className="px-3 py-3 text-center align-middle">{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {data.porConducta.map(c => (
+                      <tr key={c.articulo + c.inciso}>
+                        <td className="px-3 py-3 text-left align-middle leading-relaxed">{c.articulo.split(" - ")[0]} / {c.inciso}</td>
+                        {[c.sanciones, c.reincidencias, c.personas, c.cadenas].map((value, index) => (
+                          <td key={index} className="px-3 py-3 text-center align-middle tabular-nums">{value}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
           {/* Summary KPIs */}
           <div className="grid grid-cols-3 gap-3">
             <Card className="p-4 text-center">

@@ -1,5 +1,7 @@
 # Base de conocimiento y preparación del cambio funcional
 
+**Actualización posterior — rechazo expreso, 27/10/2026:** el usuario autorizó y se aplicó localmente la [dispensa de espera tras rechazo expreso](IMPLEMENTACION_RECHAZO_EXPRESO_2026-10-27.md). Una resolución humana verificable permite usar ese antecedente antes de siete días; un rechazo automático no concede esa excepción y una solicitud pendiente siempre bloquea. Los cambios nuevos siguen sin publicar. Las notas inferiores son históricas y deben contrastarse con este documento y las últimas notas del workspace.
+
 **Fase actual acordada:** probar manualmente en local antes de publicar; comprobar el despliegue antes de depurar los registros identificados como pruebas. Ver [acceso y recorrido de prueba local](PRUEBA_LOCAL_MANUAL.md). El entorno manual usa únicamente datos ficticios en emuladores; no se ha ejecutado publicación ni limpieza real.
 
 **Estado más reciente, 27/10/2026:** el usuario autorizó aplicar el plan. Consultar [implementación de reincidencia y validación](IMPLEMENTACION_REINCIDENCIA_2026-10-27.md): código local comprobado, sin publicar ni migrar datos reales. Al cancelar la base, se cuenta un nuevo año desde la sanción promovida. Se verificaron48 pruebas de dominio/importación y30 de servidor, más12 comprobaciones en navegador. El diagnóstico real de solo lectura detectó5 registros que requieren revisión:2 por solapamiento y3 por bifurcación. Este estado prevalece sobre las notas inferiores que limitaban la autorización a planificar.

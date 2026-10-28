@@ -1,6 +1,7 @@
 import { SancionesRelacionadas } from "@/components/historial/sanciones-relacionadas";
 import { CHAIN_DAY_MS, type ChainMetadata, type Conduct } from "@/lib/domain/recurrence-chain";
 import { formatArticleShort, formatDisciplinaryDate, formatIncisoShort, type ReincidenciaOrigenView } from "@/lib/domain/reincidencia-format";
+import { boliviaDateTime } from "@/lib/domain/audit-report";
 
 type Evaluation = {
   tipo: "base" | "escalada" | "remision";
@@ -11,6 +12,7 @@ type Evaluation = {
   reincidenciaOrigen: ReincidenciaOrigenView;
   bloqueo: string | null;
   pruebaLocalSinEspera?: boolean;
+  antecedentesConfirmados?: {antecedenteId:string;resueltaEl:string;documento:string|null}[];
 };
 
 export function ResumenSancion({ evaluation, fechaSancion }: { evaluation: Evaluation; fechaSancion: string }) {
@@ -32,6 +34,7 @@ export function ResumenSancion({ evaluation, fechaSancion }: { evaluation: Evalu
         <p><strong>Período para considerar la reincidencia:</strong> comienza el {formatDisciplinaryDate(start)} y vence el {formatDisciplinaryDate(end)}.</p>
       </div>
       {previous && <SancionesRelacionadas origin={previous} />}
+      {tipo === "escalada" && !evaluation.bloqueo && evaluation.antecedentesConfirmados?.map(row => <p key={row.antecedenteId} role="status" className="text-sm"><strong>Antecedente habilitado{row.documento ? ` (${row.documento})` : ""}:</strong> la solicitud para dejar sin efecto fue rechazada el {boliviaDateTime(row.resueltaEl)}.</p>)}
       {evaluation.bloqueo && <p role="alert" className="text-red-700"><strong>No se puede registrar todavía:</strong> {evaluation.bloqueo}</p>}
       {evaluation.pruebaLocalSinEspera && <p role="status" className="text-sm text-amber-800">Prueba local: puede registrar reincidencias sin esperar siete días. Se conservan el vencimiento anual y el bloqueo por solicitudes pendientes.</p>}
     </section>

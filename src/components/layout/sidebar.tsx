@@ -4,7 +4,8 @@ import Image from "next/image";
 import { Icons } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/primitives";
 import { useAuth, isGlobalRole, isSuperAdmin } from "@/hooks/use-auth";
-import { canRegisterFalta } from "@/lib/domain/roles";
+import { moduleLabel } from "./module-labels";
+import { canReadCancellationRequests, canRegisterFalta } from "@/lib/domain/roles";
 
 export type ModuleKey = "dashboard" | "registro" | "personal" | "historial" | "usuarios" | "unidades" | "importacion" | "reportes" | "transferencias" | "solicitudes" | "auditoria";
 
@@ -12,6 +13,7 @@ type SidebarProps = {
   activeModule: ModuleKey;
   onNavigate: (module: ModuleKey) => void;
   collapsed?: boolean;
+  mobile?: boolean;
 };
 
 type NavItem = {
@@ -25,16 +27,16 @@ const navItems: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: Icons.dashboard },
   { key: "registro", label: "Registro de Falta", icon: Icons.registro, requiredRole: canRegisterFalta },
   { key: "personal", label: "Personal", icon: Icons.usuarios },
-  { key: "historial", label: "Historial", icon: Icons.historial },
+  { key: "historial", label: "Sanciones registradas", icon: Icons.historial },
   { key: "usuarios", label: "Usuarios", icon: Icons.usuarios, requiredRole: isGlobalRole },
   { key: "unidades", label: "Unidades", icon: Icons.building, requiredRole: isGlobalRole },
   { key: "importacion", label: "Importar Personal", icon: Icons.importar, requiredRole: isGlobalRole },
   { key: "reportes", label: "Reportes", icon: Icons.reportes },
   { key: "auditoria", label: "Auditoría", icon: Icons.historial, requiredRole: isSuperAdmin },
-  { key: "solicitudes", label: "Dejar sin Efecto", icon: Icons.alertTriangle, requiredRole: isGlobalRole },
+  { key: "solicitudes", label: "Solicitudes de cancelación", icon: Icons.alertTriangle, requiredRole: canReadCancellationRequests },
 ];
 
-export function Sidebar({ activeModule, onNavigate, collapsed = false }: SidebarProps) {
+export function Sidebar({ activeModule, onNavigate, collapsed = false, mobile = false }: SidebarProps) {
   const { sessionUser, logout } = useAuth();
   const role = sessionUser?.role ?? "";
 
@@ -45,7 +47,7 @@ export function Sidebar({ activeModule, onNavigate, collapsed = false }: Sidebar
   return (
     <aside
       className={`
-        hidden lg:flex flex-col flex-shrink-0
+        ${mobile ? "flex h-full" : "hidden lg:flex"} flex-col flex-shrink-0
         bg-[var(--sidebar-bg)] text-[var(--sidebar-text)]
         rounded-2xl overflow-hidden
         transition-all duration-300
@@ -111,7 +113,7 @@ export function Sidebar({ activeModule, onNavigate, collapsed = false }: Sidebar
               <span className={`flex-shrink-0 ${isActive ? "text-[var(--gold-400)]" : ""}`}>
                 {item.icon({ size: 20 })}
               </span>
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && <span>{["personal", "historial", "solicitudes"].includes(item.key) ? moduleLabel(item.key as "personal" | "historial" | "solicitudes", role) : item.label}</span>}
             </button>
           );
         })}

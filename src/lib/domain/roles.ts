@@ -14,6 +14,14 @@ export function canViewGlobalPersonHistory(role: string): boolean {
   return role === "visor_dpto" || role === "admin_dpto" || role === "super_admin";
 }
 
+export function canReadCancellationRequests(role: string): boolean {
+  return isUnitScopedRole(role) || canResolveCancellationRequests(role);
+}
+
+export function canResolveCancellationRequests(role: string): boolean {
+  return role === "admin_dpto" || role === "super_admin";
+}
+
 export function isSuperAdmin(role: string): boolean {
   return role === "super_admin";
 }

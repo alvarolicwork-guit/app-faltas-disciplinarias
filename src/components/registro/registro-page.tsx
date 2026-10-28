@@ -41,7 +41,7 @@ type Personal = {
   canTransferToAnyUnit?: boolean;
 };
 
-type Evaluation = { tipo:"base"|"escalada"|"remision"; periodoAnteriorVencido?:boolean; conductaOrigen:Conduct; sancion:{articulo:string;inciso:string;remisionMensaje?:string}; antecedenteId:string|null; metadata:ChainMetadata|null; reincidenciaOrigen:ReincidenciaOrigenView; bloqueo:string|null; disponible:boolean; decisionVersion:string; pruebaLocalSinEspera?:boolean };
+type Evaluation = { tipo:"base"|"escalada"|"remision"; periodoAnteriorVencido?:boolean; conductaOrigen:Conduct; sancion:{articulo:string;inciso:string;remisionMensaje?:string}; antecedenteId:string|null; metadata:ChainMetadata|null; reincidenciaOrigen:ReincidenciaOrigenView; bloqueo:string|null; disponible:boolean; decisionVersion:string; pruebaLocalSinEspera?:boolean; antecedentesConfirmados?: {antecedenteId:string;resueltaEl:string;documento:string|null}[] };
 type RegistrationPayload = { personalId:string;unidadId:string;articulo:string;inciso:string;fechaSancion:string;memorandum:string;motivo:string;modoRegistro:string;reincidenciaOrigen:{articuloBase:string;incisoBase:string;faltaReferenciaId:string}|null;decisionVersion:string };
 
 export function RegistroPage() {
@@ -173,6 +173,14 @@ export function RegistroPage() {
   }
 
   function handleIncisoChange(inciso:string) { setForm(prev=>({...prev,inciso})); }
+
+  useEffect(() => {
+    if (!selectedPersonalId || !form.inciso || confirmOpen) return;
+    const refresh = () => setEvaluationGeneration(value => value + 1);
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [selectedPersonalId, form.inciso, confirmOpen]);
 
   useEffect(()=>{
     let cancelled=false;

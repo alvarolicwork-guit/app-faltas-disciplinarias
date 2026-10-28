@@ -40,14 +40,66 @@ export function canRequestCancellation(actor: { uid: string; role: string; unida
     actor.unidadId === row.unidadId && row.estado === "registrada" && end !== null && now < end;
 }
 
-export function ancestorBlock(row: Record<string, unknown>, requests: Record<string, unknown>[], now: number, options: {skipRegistrationWait?:boolean} = {}): string | null {
-  if (row.estado !== "registrada") return "El antecedente está sin efecto";
-  if (row.revisionReincidencia === "pendiente") return "El antecedente requiere revisión de su fundamento";
+export const ANCESTOR_POLICY_VERSION = "rechazo-expreso-v1";
+export type RejectionEvidence = {
+  antecedenteId: string;
+  solicitudId: string;
+  resueltaEl: string;
+  confirmacionId: string;
+  resueltaPor: { uid: string; role: string };
+};
+export type AncestorEligibility = {
+  disponible: boolean;
+  codigo: "sin_efecto" | "revision" | "fecha_no_verificable" | "solicitud_pendiente" | "espera" | "habilitado";
+  bloqueo: string | null;
+  habilitacionOrdinaria: number | null;
+  rechazoExpreso: RejectionEvidence | null;
+};
+
+/** Only server-authored, timely and attributable decisions dispense with waiting. */
+function explicitRejection(row: Record<string, unknown>, requests: Record<string, unknown>[], now: number): RejectionEvidence | null {
+  const created = millis(row.createdAt), end = cancellationDeadline(row);
+  if (typeof row.id !== "string" || created === null || end === null) return null;
+  const valid = requests.filter(request => {
+    const requested = millis(request.createdAt), resolved = millis(request.resolvedAt), deadline = requestDeadline(request);
+    const actor = request.resolvedBy as { uid?: string; role?: string } | undefined;
+    return request.faltaId === row.id && typeof request.id === "string" && !!request.id &&
+      request.estado === "rechazada" && request.causaCierre === "decision" &&
+      !!actor?.uid && actor.uid !== "sistema" && ["admin_dpto", "super_admin"].includes(actor.role ?? "") &&
+      typeof request.confirmacionId === "string" && !!request.confirmacionId &&
+      typeof request.motivoResolucion === "string" && request.motivoResolucion.trim().length >= 6 &&
+      requested !== null && requested >= created && requested < end &&
+      deadline !== null && deadline > requested && deadline <= requested + REQUEST_DAYS * DAY_MS &&
+      resolved !== null && resolved >= requested && resolved < deadline && resolved <= now;
+  }).sort((a, b) => millis(b.resolvedAt)! - millis(a.resolvedAt)! || String(a.id).localeCompare(String(b.id)));
+  const request = valid[0];
+  if (!request) return null;
+  const actor = request.resolvedBy as { uid: string; role: string };
+  return { antecedenteId: String(row.id), solicitudId: String(request.id), resueltaEl: new Date(millis(request.resolvedAt)!).toISOString(), confirmacionId: String(request.confirmacionId), resueltaPor: { uid: actor.uid, role: actor.role } };
+}
+
+export function ancestorEligibility(row: Record<string, unknown>, requests: Record<string, unknown>[], now: number, options: {skipRegistrationWait?:boolean} = {}): AncestorEligibility {
   const end = cancellationDeadline(row);
-  if (end === null) return "El antecedente no tiene fecha de registro verificable; requiere revisión";
-  if (!options.skipRegistrationWait && now < end) return `El antecedente podrá utilizarse desde ${new Date(end).toISOString()} (siete días desde su registro)`;
-  if (requests.some((r) => pendingRequest(r, now))) return "El antecedente tiene una solicitud de cancelación pendiente";
-  return null;
+  const result = (codigo: AncestorEligibility["codigo"], bloqueo: string | null, rechazoExpreso: RejectionEvidence | null = null): AncestorEligibility =>
+    ({ disponible: bloqueo === null, codigo, bloqueo, habilitacionOrdinaria: end, rechazoExpreso });
+  if (row.estado !== "registrada") return result("sin_efecto", "El antecedente está sin efecto");
+  if (row.revisionReincidencia === "pendiente") return result("revision", "El antecedente requiere revisión de su fundamento");
+  if (end === null || millis(row.createdAt)! > now) return result("fecha_no_verificable", "El antecedente no tiene fecha de registro verificable; requiere revisión");
+  // A newer pending request always takes precedence over any prior rejection.
+  if (requests.some((r) => pendingRequest(r, now))) return result("solicitud_pendiente", "El antecedente tiene una solicitud de cancelación pendiente");
+  if (now >= end) return result("habilitado", null);
+  const rejection = explicitRejection(row, requests, now);
+  if (rejection) return result("habilitado", null, rejection);
+  if (!options.skipRegistrationWait) {
+    const date = new Intl.DateTimeFormat("es-BO", { timeZone: "America/La_Paz", dateStyle: "short", timeStyle: "short" }).format(end);
+    const expired = requests.some(r => r.causaCierre === "vencimiento" || (r.estado === "pendiente" && requestDeadline(r) !== null && now >= requestDeadline(r)!));
+    return result("espera", `${expired ? "Solicitud cerrada por vencimiento. " : ""}El antecedente podrá utilizarse desde ${date} (siete días desde su registro)`);
+  }
+  return result("habilitado", null);
+}
+
+export function ancestorBlock(row: Record<string, unknown>, requests: Record<string, unknown>[], now: number, options: {skipRegistrationWait?:boolean} = {}): string | null {
+  return ancestorEligibility(row, requests, now, options).bloqueo;
 }
 
 export function dependentIds(rows: Array<{ id: string; reincidenciaOrigen?: unknown; estado?: unknown }>, root: string): string[] {

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const normalizedRows = acceptedRows.map((row) => row.normalized!);
     if (normalizedRows.some(row => row.originRowKey)) {
-      throw new Error("Importe primero las sanciones base. Los antecedentes deben cumplir siete días sin solicitudes pendientes antes de registrar reincidencias.");
+      throw new Error("Importe primero las sanciones base. Los antecedentes deben estar habilitados por plazo cumplido o rechazo expreso y sin solicitudes pendientes antes de registrar reincidencias.");
     }
     const personalIds = [...new Set(normalizedRows.map((row) => row.personalId))];
     const unitIds = [...new Set(normalizedRows.flatMap((row) => [
@@ -282,7 +282,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
         const validatedOrigin = snapshotChain(evaluation.decision.nodes);
         const metadata = evaluation.decision.metadata ?? newChainMetadata(faltaId,conduct,row.fechaSancion);
-        const effectivePayload = { ...payload,...metadata,...(evaluation.skipRegistrationWait?{pruebaLocalSinEspera:true}:{}),reincidenciaOrigen:validatedOrigin,reincidenciaReferencia:validatedOrigin,
+        const effectivePayload = { ...payload,...metadata,habilitacionAntecedentes:evaluation.habilitacionAntecedentes,...(evaluation.skipRegistrationWait?{pruebaLocalSinEspera:true}:{}),reincidenciaOrigen:validatedOrigin,reincidenciaReferencia:validatedOrigin,
           fundamentoOriginal:{...metadata,articulo:row.articulo,inciso:row.inciso,reincidenciaOrigen:validatedOrigin} };
         tx.update(importRef,{processingLeaseUntil:Timestamp.fromMillis(Date.now()+leaseDuration),updatedAt:Timestamp.now()});
         tx.set(personRef, { workflowUpdatedAt: Timestamp.now() }, { merge: true });

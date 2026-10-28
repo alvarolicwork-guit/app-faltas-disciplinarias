@@ -10,6 +10,7 @@
     "test:imports": "tsx --test src/lib/imports/historical-sanctions.test.ts src/lib/imports/recurrence-import.test.ts",
     "test:domain": "tsx --test src/lib/domain/sanction-policy.test.ts src/lib/domain/recurrence-chain.test.ts src/lib/domain/personal-search.test.ts src/lib/server/local-test-policy.test.ts",
     "test:emulator": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.test.json \"node --import tsx --test --test-concurrency=1 src/lib/server/workflow.emulator.test.ts src/lib/server/recurrence.emulator.test.ts\"",
+    "test:rejection": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.rejection.test.json \"node --import tsx --test --test-concurrency=1 src/lib/server/rejection.emulator.test.ts src/lib/server/workflow.emulator.test.ts\"",
     "test:e2e": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.test.json \"node --import tsx scripts/e2e-functional.mjs\"",
     "bootstrap:super-admin": "node --env-file=.env.local scripts/bootstrap-super-admin.mjs",
     "smoke:reincidencia": "node --env-file=.env.local scripts/smoke-reincidencia.mjs",

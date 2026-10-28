@@ -15,17 +15,31 @@ const sizeMap = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl" };
 
 export function Modal({ open, onClose, title, children, footer, size = "md" }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const focusable = () => Array.from(overlayRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], summary, [tabindex="0"]') ?? []).filter(element => element.getClientRects().length > 0);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); closeRef.current(); }
+      if (e.key !== "Tab") return;
+      const elements = focusable(), first = elements[0], last = elements.at(-1);
+      if (!first) { e.preventDefault(); overlayRef.current?.focus(); return; }
+      if (e.shiftKey && (document.activeElement === first || !overlayRef.current?.contains(document.activeElement))) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !overlayRef.current?.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
+    (focusable()[0] ?? overlayRef.current)?.focus();
     return () => {
       document.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -37,6 +51,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      tabIndex={-1}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-[var(--navy-900)]/50 backdrop-blur-sm" style={{ animation: "modal-backdrop 0.2s ease-out both" }} />

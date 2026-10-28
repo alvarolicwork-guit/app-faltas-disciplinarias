@@ -482,7 +482,7 @@ export function applyHistoricalConsistencyChecks(rows: HistoricalSanctionPreview
       let conduct = canonicalConduct(item.articulo, item.inciso);
       if (item.isEscalada) {
         if (!item.originFaltaId) throw new Error("Indique antecedente_id del registro concreto. No se deduce la conducta original por el artículo sancionador");
-        if (!existing.some(r => r.id === item.originFaltaId)) throw new Error("El antecedente debe existir previamente y cumplir siete días; no se permiten bases recién creadas en el mismo lote");
+        if (!existing.some(r => r.id === item.originFaltaId)) throw new Error("El antecedente debe existir previamente y estar habilitado al confirmar, por plazo cumplido o rechazo expreso; no se permiten bases recién creadas en el mismo lote");
         conduct = resolveChain(working, item.originFaltaId).metadata.conductaOrigen;
       }
       const decision = evaluateRecurrence(working, item.personalId, item.fechaSancion, conduct);

@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
       const date = iso(kind === "registro" ? r.createdAt : r.anulacion?.fecha);
       if ((unit && r.unidadId !== unit) || (month && (!date || boliviaMonth(date) !== month))) return;
       rows.push({ id, ...registrationClassification(r), conductaOriginal: r.conductaOrigen ? `${r.conductaOrigen.articulo} / ${r.conductaOrigen.inciso}` : "origen_no_verificable", cadenaId:r.cadenaId??"", raizHistoricaId:r.raizHistoricaId??"", raizVigenteId:r.raizVigenteId??"", inicioCadena:r.fechaInicioCadena??"", vencimientoCadena:r.fechaVencimientoCadena??"", plazoCadena:r.estadoPlazoCadena??"", revisionCadena:r.revisionCadena??"", evento: kind, mes: date ? boliviaMonth(date) : "sin_fecha_verificable", fecha: date, unidadId: r.unidadId, unidad: r.unidadSancionNombre ?? r.unidadNombre, ci: r.ci, funcionario: r.nombreCompleto, articulo: r.articulo, inciso: r.inciso, documento: r.memorandum, fechaSancion: iso(r.fechaSancion).slice(0, 10), estado: r.estado, actor: kind === "registro" ? r.createdBy?.email : r.anulacion?.anuladaPor?.email, autorUid: kind === "registro" ? r.createdBy?.uid : r.anulacion?.anuladaPor?.uid, motivo: kind === "registro" ? r.motivo : r.anulacion?.motivoEliminacion, via: r.anulacion?.via ?? "", antecedenteId: r.reincidenciaOrigen?.faltaReferenciaId ?? "", confirmacionId: (kind === "registro" ? r.confirmacion?.id : r.anulacion?.confirmacionId) ?? "legado_sin_constancia" });
+      const evidence = kind === "registro" ? r.habilitacionAntecedentes?.rechazosExpresos ?? [] : [];
+      rows.at(-1)!.habilitacionAnticipada = evidence.map((e: {antecedenteId:string;solicitudId:string;resueltaEl:string;resueltaPor:{uid:string;role:string}}) => `Antecedente ${e.antecedenteId}; solicitud ${e.solicitudId}; rechazo ${e.resueltaEl}; autoridad ${e.resueltaPor.uid} (${e.resueltaPor.role})`).join(' | ');
     }
     for (const r of annotated) if (type === "sanciones") add(r.id,r,"registro"); else if (r.estado === "anulada") add(r.id,r,"sancion_sin_efecto");
     if (type === "cancelaciones") {
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
         const r = d.data();
         const date = iso(r.resolvedAt ?? r.createdAt);
         if ((unit && r.solicitanteUnidadId !== unit) || (month && (!date || boliviaMonth(date) !== month))) continue;
-        rows.push({ id: d.id, faltaId: r.faltaId, evento: "solicitud", mes: date ? boliviaMonth(date) : "sin_fecha_verificable", fecha: date, unidadId: r.solicitanteUnidadId, unidad: r.solicitanteUnidadNombre, funcionario: r.faltaResumen?.nombreCompleto, estado: r.estado, solicitante: r.solicitadaPor?.email, actor: r.resolvedBy?.email ?? r.resolvedBy?.uid, motivo: r.motivo, motivoResolucion: r.motivoResolucion ?? "", causa: r.causaCierre ?? "", solicitada: iso(r.createdAt), vence: iso(r.expiresAt) });
+        rows.push({ id: d.id, faltaId: r.faltaId, evento: "solicitud", mes: date ? boliviaMonth(date) : "sin_fecha_verificable", fecha: date, unidadId: r.solicitanteUnidadId, unidad: r.solicitanteUnidadNombre, funcionario: r.faltaResumen?.nombreCompleto, estado: r.estado, solicitante: r.solicitadaPor?.email, actor: r.resolvedBy?.email ?? r.resolvedBy?.uid, motivo: r.motivo, motivoResolucion: r.motivoResolucion ?? "", causa: r.causaCierre ?? "", dispensaEspera: r.dispensaEspera === true ? "Se eliminó la espera restante" : "Sin dispensa registrada", solicitada: iso(r.createdAt), vence: iso(r.expiresAt) });
       }
     }
     if (type === "cancelaciones") {

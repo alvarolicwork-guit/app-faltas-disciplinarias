@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const result = await db.runTransaction(async tx => {
       await assertCurrentActor(tx, db, actor);
       const evaluation = await evaluateInTransaction(tx, db, input.personalId, input.fechaSancion, input.articulo, input.inciso);
-      return publicDecision(evaluation.decision, evaluation.bloqueo, evaluation.decisionVersion);
+      return publicDecision(evaluation.decision, evaluation.bloqueo, evaluation.decisionVersion, evaluation.habilitacionAntecedentes.rechazosExpresos);
     });
     return NextResponse.json(result);
   } catch (error) { return operationError(error); }

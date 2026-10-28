@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ancestorBlock, canRequestCancellation, DAY_MS, lowerDependentChain, pendingRequest } from "./sanction-policy";
+import { ancestorBlock, ancestorEligibility, canRequestCancellation, DAY_MS, lowerDependentChain, pendingRequest } from "./sanction-policy";
 import { parseDelimited, escapeHtml } from "./delimited";
 import { boliviaMonth, csvCell } from "./audit-report";
 
@@ -27,6 +27,42 @@ test("antecedentes vigentes esperan siete días y ausencia de solicitud",()=>{
   assert.match(ancestorBlock(row,[request],start+8*DAY_MS)!,/solicitud/);
   assert.equal(ancestorBlock(row,[request],start+11*DAY_MS),null);
   assert.match(ancestorBlock({...row,estado:"anulada"},[],start+20*DAY_MS)!,/sin efecto/);
+});
+
+const earlyRow = {...row,id:"antecedente"};
+const rejected = {id:"solicitud",faltaId:earlyRow.id,estado:"rechazada",causaCierre:"decision",createdAt:new Date(start+DAY_MS).toISOString(),resolvedAt:new Date(start+2*DAY_MS).toISOString(),expiresAt:new Date(start+6*DAY_MS).toISOString(),resolvedBy:{uid:"departamental",role:"admin_dpto"},motivoResolucion:"La sanción está correctamente registrada",confirmacionId:"confirmacion"};
+test("rechazo expreso dispensa únicamente la espera del antecedente asociado",()=>{
+  const result=ancestorEligibility(earlyRow,[rejected],start+2*DAY_MS);
+  assert.equal(result.disponible,true);assert.equal(result.rechazoExpreso?.solicitudId,"solicitud");
+  assert.equal(ancestorEligibility({...earlyRow,id:"otro"},[rejected],start+2*DAY_MS).disponible,false);
+  assert.equal(ancestorEligibility(earlyRow,[{...rejected,resolvedBy:{uid:"super",role:"super_admin"}}],start+2*DAY_MS).disponible,true);
+  assert.equal(ancestorEligibility(earlyRow,[rejected],start+2*DAY_MS-1).disponible,false);
+});
+test("pendiente prevalece sobre rechazo previo incluso antes del séptimo día",()=>{
+  const pending={estado:"pendiente",createdAt:new Date(start+3*DAY_MS).toISOString()};
+  assert.equal(ancestorEligibility(earlyRow,[rejected,pending],start+4*DAY_MS).codigo,"solicitud_pendiente");
+  assert.equal(ancestorEligibility(earlyRow,[rejected,{estado:"pendiente"}],start+4*DAY_MS).codigo,"solicitud_pendiente");
+});
+test("vencimiento al día seis espera solo hasta siete; vencimiento al once no añade días",()=>{
+  const expired={...rejected,causaCierre:"vencimiento",resolvedBy:{uid:"sistema",role:"sistema"},resolvedAt:new Date(start+6*DAY_MS).toISOString()};
+  assert.equal(ancestorEligibility(earlyRow,[expired],start+6*DAY_MS).codigo,"espera");
+  assert.match(ancestorBlock(earlyRow,[expired],start+6*DAY_MS)!,/vencimiento/);
+  assert.equal(ancestorBlock(earlyRow,[expired],start+7*DAY_MS),null);
+  const unprocessed={estado:"pendiente",createdAt:new Date(start+6*DAY_MS).toISOString()};
+  assert.equal(ancestorEligibility(earlyRow,[unprocessed],start+11*DAY_MS-1).codigo,"solicitud_pendiente");
+  assert.equal(ancestorBlock(earlyRow,[unprocessed],start+11*DAY_MS),null);
+});
+test("evidencia incompleta, tardía, futura o sin autoridad no habilita anticipadamente",()=>{
+  const patches:Record<string,unknown>[]=[{causaCierre:undefined},{estado:"aprobada"},{confirmacionId:""},{id:undefined},{motivoResolucion:""},{resolvedBy:{uid:"sistema",role:"sistema"}},{resolvedBy:{uid:"operador",role:"operador_unidad"}},{createdAt:new Date(start-1).toISOString()},{createdAt:new Date(start+7*DAY_MS).toISOString()},{resolvedAt:rejected.expiresAt},{resolvedAt:new Date(start).toISOString()},{expiresAt:new Date(start+10*DAY_MS).toISOString()},{resolvedAt:undefined}];
+  for(const patch of patches) assert.equal(ancestorEligibility(earlyRow,[{...rejected,...patch}],start+3*DAY_MS).disponible,false,JSON.stringify(patch));
+  assert.equal(ancestorEligibility({...earlyRow,createdAt:undefined},[rejected],start+3*DAY_MS).codigo,"fecha_no_verificable");
+  assert.equal(ancestorEligibility({...earlyRow,createdAt:new Date(start+4*DAY_MS).toISOString()},[rejected],start+3*DAY_MS).codigo,"fecha_no_verificable");
+});
+test("rechazo no supera sin efecto ni revisión y la dispensa termina al cumplir siete días",()=>{
+  assert.equal(ancestorEligibility({...earlyRow,estado:"anulada"},[rejected],start+3*DAY_MS).codigo,"sin_efecto");
+  assert.equal(ancestorEligibility({...earlyRow,revisionReincidencia:"pendiente"},[rejected],start+3*DAY_MS).codigo,"revision");
+  assert.equal(ancestorEligibility(earlyRow,[rejected],start+7*DAY_MS).rechazoExpreso,null);
+  assert.equal(canRequestCancellation({uid:"a",role:"admin_unidad",unidadId:"u"},earlyRow,start+2*DAY_MS),true);
 });
 const chain=[
   {id:"a",personalId:"p",articulo:"Art. 9",inciso:"3. Base",estado:"registrada",fechaSancion:"2026-01-01"},

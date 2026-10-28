@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useAuth } from "@/hooks/use-auth";
+import { canReadCancellationRequests, canResolveCancellationRequests } from "@/lib/domain/roles";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -21,6 +23,8 @@ type Solicitud = {
   solicitanteUnidadNombre?: string;
   faltaResumen?: { nombreCompleto?: string; ci?: string; memorandum?: string };
   solicitadaPor?: { email?: string };
+  resolvedBy?: { email?: string; uid?: string };
+  causaCierre?: string;
   createdAt?: string;
   expiresAt?: string | null;
   resolvedAt?: string;
@@ -39,11 +43,15 @@ function remainingTime(row: Solicitud, now: number): string {
   return days ? `Vence en ${days} d${hours ? ` y ${hours} h` : ""}` : hours ? `Vence en ${hours} h${minutes % 60 ? ` y ${minutes % 60} min` : ""}` : `Vence en ${minutes} min`;
 }
 
-export function SolicitudesPage() {
+export function SolicitudesPage({ selectedRequestId, onFindSanction }: { selectedRequestId?: string; onFindSanction: () => void }) {
+  const { sessionUser } = useAuth();
+  const canRead = canReadCancellationRequests(sessionUser?.role ?? "");
+  const canResolve = canResolveCancellationRequests(sessionUser?.role ?? "");
   const { get, post, patch } = useApi();
   const { fetchWithCache, invalidate } = useDataCache();
   const toast = useToast();
-  const [rows, setRows] = useState<Solicitud[]>([]);
+  const [result, setResult] = useState<{key:string; rows:Solicitud[]; error?:string} | null>(null);
+  const loadVersion = useRef(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"pendiente" | "aprobada" | "rechazada">("pendiente");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -53,24 +61,34 @@ export function SolicitudesPage() {
   const [resolveReason, setResolveReason] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
+  const queryKey = `solicitudes-baja:${sessionUser?.uid}:${sessionUser?.role}:${sessionUser?.unidadId ?? ""}:${filter}`;
   const loadData = useCallback(async (options?: { force?: boolean; silent?: boolean }) => {
+    if (!canRead) return;
+    const version = ++loadVersion.current;
     if (!options?.silent) setLoading(true);
     try {
-      const payload = await fetchWithCache(
-        `solicitudes-baja:${filter}`,
+      const payload = await fetchWithCache(queryKey,
         () => get<{ data: Solicitud[] }>(`/api/faltas/solicitudes?estado=${filter}`),
-        { ttlMs: filter === "pendiente" ? 60 * 1000 : 5 * 60 * 1000, force: options?.force },
-      );
-      setRows(payload.data.data);
+        { ttlMs: filter === "pendiente" ? 60_000 : 300_000, force: options?.force });
+      if (version !== loadVersion.current) return;
+      setResult({key:queryKey, rows:payload.data.data});
       setNow(Date.now());
+    } catch (error) {
+      if (version === loadVersion.current) setResult({key:queryKey, rows:[], error:error instanceof Error ? error.message : "No se pudieron consultar las solicitudes"});
     } finally {
-      if (!options?.silent) setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
-  }, [fetchWithCache, get, filter]);
+  }, [canRead, queryKey, fetchWithCache, get, filter]);
+  const rows = result?.key === queryKey ? result.rows : [];
+  const loadError = result?.key === queryKey ? result.error : null;
+  const isLoading = loading || result?.key !== queryKey;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
+    void loadData({ force: true });
+    // Invalidate all in-flight loads on scope changes and unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { loadVersion.current++; };
   }, [loadData]);
 
   useEffect(() => {
@@ -94,6 +112,7 @@ export function SolicitudesPage() {
   }, [nextDeadline, loadData]);
 
   function openResolveModal(row: Solicitud, decision: "aprobada" | "rechazada") {
+    if (!canResolve || !pendingRequest(row, now)) return;
     setResolveTarget(row);
     setResolveDecision(decision);
     setResolveReason("");
@@ -128,7 +147,12 @@ export function SolicitudesPage() {
   }
 
   async function submitResolve() {
-    if (!resolveTarget) return;
+    if (!canResolve || !resolveTarget || !pendingRequest(resolveTarget, Date.now())) {
+      toast.warning("La solicitud ya no está disponible para resolver");
+      setResolveModalOpen(false);
+      void loadData({force:true});
+      return;
+    }
 
     const motivoResolucion = resolveReason.trim();
     if (motivoResolucion.length < 6) {
@@ -149,6 +173,7 @@ export function SolicitudesPage() {
       invalidate("historial:");
       invalidate("dashboard:");
       invalidate("reportes:");
+      invalidate("personal:");
       toast.success(
         resolveDecision === "aprobada" ? "Solicitud aprobada" : "Solicitud rechazada",
       );
@@ -163,15 +188,19 @@ export function SolicitudesPage() {
     }
   }
 
+  if (!canRead) return <p role="alert">No tiene permisos para consultar solicitudes.</p>;
+
   return (
     <div className="space-y-4 animate-fade-in">
+      {sessionUser?.role === "super_admin" && <Card className="p-5"><p className="mb-3 text-sm">Para dejar sin efecto una sanción sin solicitud, seleccione su registro y confirme el motivo y el impacto.</p><Button variant="outline" onClick={onFindSanction}>Buscar sanción para dejar sin efecto</Button></Card>}
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="text-base font-bold text-[var(--navy-900)]">Solicitudes de cancelación</h3>
             <p className="text-sm text-[var(--navy-500)]">{filter === "pendiente" ? "Se muestran primero las solicitudes próximas a vencer." : "Consulta de solicitudes resueltas."}</p>
+            {!canResolve && <p className="text-sm text-[var(--navy-500)]">Seguimiento de solicitudes de {sessionUser?.unidadNombre || "su unidad"}.</p>}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { void loadData({ force: true }); }} loading={loading}>
+          <Button variant="outline" size="sm" onClick={() => { void loadData({ force: true }); }} loading={isLoading}>
             Actualizar
           </Button>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
@@ -188,9 +217,9 @@ export function SolicitudesPage() {
           </div>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
-        ) : visibleRows.length === 0 ? (
+        ) : loadError ? (<div role="alert"><p>No se pudieron cargar las solicitudes: {loadError}</p><Button variant="outline" onClick={() => void loadData({force:true})}>Reintentar</Button></div>) : visibleRows.length === 0 ? (
           <EmptyState title="Sin solicitudes" description="No existen solicitudes para este estado." />
         ) : (
           <div className="overflow-auto rounded-xl border border-[var(--border)]">
@@ -208,13 +237,13 @@ export function SolicitudesPage() {
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {visibleRows.map((row) => (
-                  <tr key={row.id}>
+                  <tr key={row.id} className={row.id === selectedRequestId ? "bg-[var(--gold-50)]" : ""}>
                     <td className="px-4 py-3 text-[var(--navy-700)]">{row.createdAt ? boliviaDateTime(row.createdAt) : "-"}</td>
-                    <td className="px-4 py-3 text-[var(--navy-900)] font-medium">{row.faltaResumen?.nombreCompleto ?? "-"} ({row.faltaResumen?.ci ?? "-"})</td>
+                    <td className="px-4 py-3 text-[var(--navy-900)] font-medium">{row.faltaResumen?.nombreCompleto ?? "-"} ({row.faltaResumen?.ci ?? "-"})<p className="text-xs font-normal">Documento: {row.faltaResumen?.memorandum || "No registrado"}</p>{row.id === selectedRequestId && <p className="text-xs font-semibold">Solicitud seleccionada</p>}</td>
                     <td className="px-4 py-3 text-[var(--navy-700)]">{row.solicitanteUnidadNombre ?? "-"}</td>
-                    <td className="px-4 py-3 text-[var(--navy-700)] max-w-[350px]">{row.motivo}</td>
+                    <td className="px-4 py-3 text-[var(--navy-700)] max-w-[350px]"><p>{row.motivo}</p><p className="mt-1 text-xs">Solicitante: {row.solicitadaPor?.email || "No registrado"}</p><details className="mt-2"><summary>Ver información de la solicitud</summary><p>Tipo: {row.tipoSolicitud === "representacion" ? "Representación de la sanción" : row.tipoSolicitud === "error_insercion" ? "Error de inserción" : "No registrado"}</p>{row.memorandumRepresentacion && <p>Documento de representación: {row.memorandumRepresentacion}</p>}{row.comentario && row.comentario !== row.motivo && <p>Comentario: {row.comentario}</p>}{row.motivoResolucion && <p>Motivo de resolución: {row.motivoResolucion}</p>}{row.resolvedBy && <p>Resuelta por: {row.resolvedBy.email || (row.resolvedBy.uid === "sistema" ? "Sistema — vencimiento del plazo" : row.resolvedBy.uid)}</p>}</details></td>
                     <td className="px-4 py-3">
-                      <Badge variant={row.estado === "pendiente" ? "warning" : row.estado === "aprobada" ? "success" : "default"}>{row.estado}</Badge>
+                      <Badge variant={row.estado === "pendiente" ? "warning" : row.estado === "aprobada" ? "success" : "default"}>{row.estado === "rechazada" ? row.causaCierre === "vencimiento" ? "Rechazada por vencimiento" : row.causaCierre === "decision" ? "Rechazada por el administrador" : "Rechazada" : row.estado}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       {row.estado === "pendiente" ? <>
@@ -223,13 +252,13 @@ export function SolicitudesPage() {
                       </> : <span className="text-xs">{row.resolvedAt ? boliviaDateTime(row.resolvedAt) : "-"}</span>}
                     </td>
                     <td className="px-4 py-3">
-                        {row.estado === "pendiente" ? (
+                        {canResolve && pendingRequest(row, now) ? (
                           <div className="flex gap-2">
                             <Button size="sm" variant="primary" loading={busyId === row.id} onClick={() => openResolveModal(row, "aprobada")}>Aprobar</Button>
                             <Button size="sm" variant="outline" loading={busyId === row.id} onClick={() => openResolveModal(row, "rechazada")}>Rechazar</Button>
                           </div>
                         ) : (
-                        <span className="text-xs text-[var(--navy-500)]">{row.motivoResolucion ?? "Resuelta"}</span>
+                        <span className="text-xs text-[var(--navy-500)]">{row.estado === "pendiente" ? "En revisión departamental" : row.motivoResolucion || "Resuelta"}</span>
                       )}
                     </td>
                   </tr>
@@ -241,7 +270,7 @@ export function SolicitudesPage() {
       </Card>
 
       <Modal
-        open={resolveModalOpen}
+        open={canResolve && resolveModalOpen}
         onClose={closeResolveModal}
         title={resolveDecision === "aprobada" ? "Aprobar solicitud" : "Rechazar solicitud"}
         size="md"
@@ -254,7 +283,7 @@ export function SolicitudesPage() {
               variant={resolveDecision === "aprobada" ? "primary" : "outline"}
               onClick={() => { void submitResolve(); }}
               loading={!!busyId}
-              disabled={resolveReason.trim().length < 6}
+              disabled={!canResolve || !resolveTarget || !pendingRequest(resolveTarget, now) || resolveReason.trim().length < 6}
             >
               {resolveDecision === "aprobada" ? "Aprobar y dejar sin efecto" : "Confirmar rechazo"}
             </Button>

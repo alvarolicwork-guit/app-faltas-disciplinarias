@@ -1,7 +1,7 @@
 import { DocumentData, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { ancestorBlock, authorUid, cancellationDeadline, canRequestCancellation, dependentIds, lowerDependentChain, requestDeadline, REQUEST_DAYS, DAY_MS } from "@/lib/domain/sanction-policy";
+import { ancestorBlock, ancestorEligibility, authorUid, cancellationDeadline, canRequestCancellation, dependentIds, lowerDependentChain, requestDeadline, REQUEST_DAYS, DAY_MS } from "@/lib/domain/sanction-policy";
 import { Actor, actorData, assertCurrentActor, audit, notification, OperationError, readConfirmation, payloadHash } from "./operations";
 import { skipLocalRecurrenceWait } from "./local-test-policy";
 
@@ -52,6 +52,7 @@ export async function createCancellationRequest(actor: Actor, input: { faltaId: 
     const dependents = await tx.get(db.collection("faltas").where("personalId", "==", falta.personalId));
     if (dependentIds(dependents.docs.map((d) => ({ ...d.data(), id: d.id })), input.faltaId).length) throw new OperationError("El registro tiene reincidencias dependientes; requiere intervención extraordinaria");
     const now = Timestamp.now();
+    if (!canRequestCancellation(actor, falta, now.toMillis())) throw new OperationError("El plazo de siete días para solicitarlo ha vencido", 403);
     const payload = { ...input, estado: "pendiente", solicitanteUnidadId: falta.unidadId, solicitanteUnidadNombre: falta.unidadNombre ?? "", solicitadaPor: actorData(actor), createdAt: now, expiresAt: Timestamp.fromMillis(now.toMillis() + REQUEST_DAYS * DAY_MS), faltaResumen: { ci: falta.ci, nombreCompleto: falta.nombreCompleto, memorandum: falta.memorandum, articulo: falta.articulo, inciso: falta.inciso, unidadId: falta.unidadId } };
     tx.set(ref, payload);
     tx.set(personRef, { workflowUpdatedAt: now }, { merge: true });
@@ -79,14 +80,18 @@ export async function resolveCancellationRequest(actor: Actor, id: string, paylo
     const personRef = db.collection("personal").doc(falta.personalId);
     await tx.get(personRef);
     const all = await tx.get(db.collection("faltas").where("personalId", "==", falta.personalId));
+    const requests = await tx.get(db.collection("solicitudes_eliminacion_falta").where("faltaId", "==", row.faltaId));
     if (payload.decision === "aprobada" && dependentIds(all.docs.map((d) => ({ ...d.data(), id: d.id })), row.faltaId).length) throw new OperationError("Existen reincidencias dependientes; use la revisión extraordinaria");
     const now = Timestamp.now();
+    if (now.toMillis() >= requestDeadline(row)!) throw new OperationError("La solicitud ya fue resuelta o venció");
     const resolution = { ...payload, estado: payload.decision, resolvedAt: now, resolvedBy: actorData(actor), causaCierre: "decision", confirmacionId: confirmation.ref.id };
-    tx.update(ref, resolution);
+    const eligibility = ancestorEligibility({...falta,id:row.faltaId}, requests.docs.map(d => ({...d.data(),...(d.id === id ? resolution : {}),id:d.id})), now.toMillis());
+    const dispensaEspera = eligibility.rechazoExpreso?.solicitudId === id && payload.decision === "rechazada";
+    tx.update(ref, { ...resolution, dispensaEspera });
     if (payload.decision === "aprobada") tx.update(faltaRef, { estado: "anulada", anulacion: { motivoEliminacion: row.motivo, motivoResolucion: payload.motivoResolucion, solicitudId: id, anuladaPor: actorData(actor), fecha: now, via: "solicitud", confirmacionId: confirmation.ref.id }, updatedAt: now });
     tx.set(personRef, { workflowUpdatedAt: now }, { merge: true });
-    audit(tx, db, actor, "resolve_delete_falta_request", row.faltaId, { solicitudId: id, unidadId: falta.unidadId, before: row, after: { ...row, ...resolution } });
-    notification(tx, db, `solicitud-${id}-resuelta`, { unidadId: falta.unidadId, destinatarioUid: row.solicitadaPor?.uid ?? null, faltaId: row.faltaId, titulo: `Solicitud ${payload.decision}`, mensaje: payload.motivoResolucion, solicitudId: id });
+    audit(tx, db, actor, "resolve_delete_falta_request", row.faltaId, { solicitudId: id, unidadId: falta.unidadId, before: row, after: { ...row, ...resolution, dispensaEspera } });
+    notification(tx, db, `solicitud-${id}-resuelta`, { unidadId: falta.unidadId, destinatarioUid: row.solicitadaPor?.uid ?? null, faltaId: row.faltaId, titulo: `Solicitud ${payload.decision}`, mensaje: `${payload.motivoResolucion}${dispensaEspera ? " Se elimina la espera restante de este antecedente para considerar reincidencia; se mantienen las demás verificaciones." : ""}`, solicitudId: id });
     const result = { ok: true };
     tx.update(confirmation.ref, { result, consumedAt: now });
     return result;
@@ -152,6 +157,6 @@ export async function cancelDirectly(actor: Actor, payload: { id: string; motivo
 export async function assertAncestorAvailable(id: string, row: DocumentData) {
   await expireRequestsForFalta(id);
   const requests = await getAdminDb().collection("solicitudes_eliminacion_falta").where("faltaId", "==", id).get();
-  const reason = ancestorBlock(row, requests.docs.map((d) => d.data()), Date.now(), {skipRegistrationWait:skipLocalRecurrenceWait()});
+  const reason = ancestorBlock({...row,id}, requests.docs.map((d) => ({...d.data(),id:d.id})), Date.now(), {skipRegistrationWait:skipLocalRecurrenceWait()});
   if (reason) throw new OperationError(reason);
 }

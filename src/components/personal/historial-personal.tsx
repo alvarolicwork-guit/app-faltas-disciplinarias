@@ -4,22 +4,15 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Badge, EmptyState } from "@/components/ui/primitives";
-import { SancionesRelacionadas } from "@/components/historial/sanciones-relacionadas";
+import { ContenidoSancion, type SancionView } from "@/components/historial/contenido-sancion";
 import { useApi } from "@/hooks/use-api";
 import { useAuth } from "@/hooks/use-auth";
 import { canViewGlobalPersonHistory, isUnitScopedRole } from "@/lib/domain/roles";
-import { formatArticleShort, formatDisciplinaryDate, formatIncisoShort, type ReincidenciaOrigenView } from "@/lib/domain/reincidencia-format";
+import { formatArticleShort, formatDisciplinaryDate, formatIncisoShort } from "@/lib/domain/reincidencia-format";
 
-type Person = { id: string; ci: string; nombreCompleto?: string; grado: string; nombres: string; apellidos: string };
-type Sanction = {
-  id: string; articulo: string; inciso: string; fechaSancion: string | null; createdAt?: string;
-  estado: string; memorandum?: string; motivo?: string; unidadSancionNombre?: string; unidadNombre?: string;
-  conductaOrigen?: { articulo: string; inciso: string }; reincidencia?: boolean; tipoRegistro?: string;
-  reincidenciaOrigen?: ReincidenciaOrigenView; fechaInicioCadena?: string; fechaVencimientoCadena?: string;
-  revisionCadena?: string; tipificacionOriginal?: { articulo: string; inciso: string }; documentoRequiereRevision?: boolean;
-  createdBy?: { uid?: string; email?: string; nombreCompleto?: string }; registradoPor?: string;
-  anulacion?: { motivoEliminacion?: string; motivoResolucion?: string };
-};
+export type Person = { id: string; ci?: string; nombreCompleto?: string; grado?: string; nombres?: string; apellidos?: string };
+type Sanction = SancionView;
+
 type Result = { key: string; rows: Sanction[]; error?: string };
 
 export function HistorialPersonal({ person, initialUnitId, unitName, onClose }: { person: Person; initialUnitId: string; unitName: string; onClose: () => void }) {
@@ -56,8 +49,8 @@ export function HistorialPersonal({ person, initialUnitId, unitName, onClose }: 
   return <Modal open onClose={onClose} title="Historial del efectivo" size="lg" footer={<Button variant="outline" onClick={onClose}>Cerrar historial</Button>}>
     <div className="space-y-4">
       <div className="rounded-xl bg-[var(--navy-50)] border p-3">
-        <h3 className="font-bold text-[var(--navy-900)]">{person.nombreCompleto || `${person.grado} ${person.nombres} ${person.apellidos}`.trim()}</h3>
-        <p className="text-sm">CI: {person.ci}</p>
+        <h3 className="font-bold text-[var(--navy-900)]">{person.nombreCompleto || [person.grado, person.nombres, person.apellidos].filter(Boolean).join(" ") || "Nombre no registrado"}</h3>
+        <p className="text-sm">CI: {person.ci || "No registrada"}</p>
         <p className="mt-1 text-sm font-semibold">{globalScope ? "Historial departamental · Todas las unidades" : `Historial de la unidad · ${unitName || sessionUser?.unidadNombre || unitId}`}</p>
       </div>
       <div className="flex flex-wrap gap-2 items-center">
@@ -79,17 +72,7 @@ export function HistorialPersonal({ person, initialUnitId, unitName, onClose }: 
             <p className="text-sm"><strong>Unidad que registró la sanción:</strong> {row.unidadSancionNombre ?? row.unidadNombre ?? "No registrada"}</p>
             <p className="text-sm"><strong>{row.conductaOrigen ? "Falta cometida" : "Detalle registrado"}:</strong> {row.conductaOrigen ? `${formatArticleShort(row.conductaOrigen.articulo)} / ${row.conductaOrigen.inciso}` : row.inciso}</p>
             {row.estado === "anulada" && <p className="text-sm"><strong>Motivo para dejarla sin efecto:</strong> {row.anulacion?.motivoEliminacion ?? "No consta en este registro"}</p>}
-            <details className="text-sm"><summary className="cursor-pointer font-semibold">Ver detalle de la sanción</summary><div className="mt-2 space-y-2">
-              <p><strong>Sanción registrada:</strong> {row.articulo} / {row.inciso}</p>
-              <p><strong>Motivo disciplinario:</strong> {row.motivo ?? "No registrado"}</p>
-              <p><strong>Registrada por:</strong> {row.createdBy?.nombreCompleto ?? row.createdBy?.email ?? row.registradoPor ?? row.createdBy?.uid ?? "No registrado"}</p>
-              {row.fechaVencimientoCadena && <p><strong>Período para considerar la reincidencia:</strong> comienza el {formatDisciplinaryDate(row.fechaInicioCadena)} y vence el {formatDisciplinaryDate(row.fechaVencimientoCadena)}.</p>}
-              {row.tipificacionOriginal && <p><strong>Sanción antes del ajuste por cancelación de un antecedente:</strong> {row.tipificacionOriginal.articulo} / {row.tipificacionOriginal.inciso}</p>}
-              {row.documentoRequiereRevision && <p role="alert">El documento requiere revisión por el ajuste de la sanción.</p>}
-              {row.revisionCadena && <p role="alert">Los antecedentes requieren revisión: {row.revisionCadena}</p>}
-              {row.anulacion?.motivoResolucion && <p><strong>Motivo de la resolución:</strong> {row.anulacion.motivoResolucion}</p>}
-              {row.reincidenciaOrigen && <SancionesRelacionadas origin={row.reincidenciaOrigen} />}
-            </div></details>
+            <details className="text-sm"><summary className="cursor-pointer font-semibold">Ver detalle de la sanción</summary><div className="mt-2"><ContenidoSancion row={row} /></div></details>
           </article>)}
         </div>}
       </>}
