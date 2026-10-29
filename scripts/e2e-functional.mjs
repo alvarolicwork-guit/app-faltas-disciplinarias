@@ -93,6 +93,7 @@ try {
   await page.getByText('Notificaciones de la app',{exact:false}).click();
   await page.getByText('Solicitud aprobada',{exact:true}).waitFor();
   const superPage=await browser.newPage({viewport:{width:1440,height:1000}});
+  superPage.on('pageerror',e=>failures.push(e.message));
   await superPage.goto('http://localhost:3137');
   await superPage.getByLabel('Correo electrónico').fill('e2e-super@example.test');
   await superPage.getByLabel('Contraseña',{exact:true}).fill('SoloPruebas123');
@@ -135,6 +136,65 @@ try {
   await superPage.reload();await superPage.getByRole('button',{name:'Importar Personal',exact:true}).click();
   await superPage.getByRole('button',{name:'Ver resultado',exact:true}).first().click();
   await superPage.getByRole('heading',{name:'Resultado de Importación',exact:true}).waitFor();
+  // R01: recover an interrupted preparation through the real UI after reload.
+  const {payloadHash}=await import('../src/lib/server/operations.ts');
+  const {preparePersonalRows}=await import('../src/lib/imports/personal-rows.ts');
+  const recoveryRows=[
+    {ci:'99887766',grado:'Sgto.',nombres:'Prueba',apellidos:'Recuperada Uno',sexo:'Masculino'},
+    {ci:'99887768',grado:'Sgto.',nombres:'Prueba',apellidos:'Recuperada Dos',sexo:'Femenino'},
+    {ci:'99887769',grado:'Grado ficticio inválido',nombres:'Prueba',apellidos:'Rechazada',sexo:'Masculino'},
+  ];
+  const recoveryRef=db.collection('imports_personal').doc('e2e-recovery-staging');
+  const prepared=preparePersonalRows(recoveryRows);
+  await recoveryRef.set({fileName:'recuperacion-ficticia.csv',hash:payloadHash(recoveryRows),totalRows:3,status:'staging',createdRows:0,updatedRows:0,okRows:0,errorRows:1,processedRows:1,createdBy:{uid:'original-super',role:'super_admin'},createdAt:Timestamp.fromMillis(1)});
+  await recoveryRef.collection('rows').doc('000000').set({...prepared[0],status:'pending'});
+  const originalIdentity=(await db.collection('personal').where('ci','==','99887766').get()).docs[0].id;
+  const lotsBefore=(await db.collection('imports_personal').count().get()).data().count;
+  const recoveryCsv=rows=>Buffer.from('ci;grado;nombres;apellidos;sexo\n'+rows.map(r=>[r.ci,r.grado,r.nombres,r.apellidos,r.sexo].join(';')).join('\n'));
+  await superPage.reload();await superPage.getByRole('button',{name:'Importar Personal',exact:true}).click();
+  const recoveryRow=superPage.locator(`[data-import-id="${recoveryRef.id}"]`);
+  await recoveryRow.getByRole('button',{name:'Continuar importación',exact:true}).click();
+  await superPage.getByText('Recuperar importación: recuperacion-ficticia.csv',{exact:true}).waitFor();
+  await superPage.getByLabel('Seleccionar archivo original',{exact:true}).setInputFiles({name:'incorrecto.csv',mimeType:'text/csv',buffer:recoveryCsv([{...recoveryRows[0],nombres:'Otro contenido'},...recoveryRows.slice(1)])});
+  const mismatched=superPage.waitForResponse(r=>r.url().endsWith('/api/imports/personal')&&r.request().method()==='POST');
+  await superPage.getByRole('button',{name:'Continuar esta importación',exact:true}).click();
+  assert.equal((await mismatched).status(),409);
+  await superPage.getByText('El archivo no coincide con esta importación. Seleccione el archivo original.',{exact:true}).waitFor();
+  assert.equal((await recoveryRef.get()).data().status,'staging');
+  assert.equal((await recoveryRef.collection('rows').count().get()).data().count,1);
+  // Leaving recovery never deletes the pending import. Re-enter it from persisted state.
+  await superPage.getByRole('button',{name:'Salir de la recuperación',exact:true}).click();
+  assert.equal(await superPage.getByRole('button',{name:'Continuar esta importación',exact:true}).count(),0);
+  await superPage.reload();await superPage.getByRole('button',{name:'Importar Personal',exact:true}).click();
+  await recoveryRow.getByRole('button',{name:'Continuar importación',exact:true}).click();
+  await superPage.getByLabel('Seleccionar archivo original',{exact:true}).setInputFiles({name:'renombrado.csv',mimeType:'text/csv',buffer:recoveryCsv(recoveryRows)});
+  // Drop only the response after the actual API commits preparation. No fake success.
+  let recoverRequests=0;let lostResponseId;
+  await superPage.route('**/api/imports/personal',async route=>{
+    const request=route.request();
+    if(request.method()==='POST'&&request.postDataJSON()?.action==='resume_preparation'){
+      recoverRequests++;assert.equal(request.postDataJSON().importId,recoveryRef.id);assert.equal(request.postDataJSON().operationId,undefined);
+      const response=await route.fetch();assert.equal(response.status(),200);lostResponseId=(await response.json()).importId;
+      await route.abort('failed');
+    }else await route.continue();
+  });
+  // Two clicks in the same event turn must still send only one recovery request.
+  await superPage.getByRole('button',{name:'Continuar esta importación',exact:true}).evaluate(button=>{button.click();button.click();});
+  await recoveryRow.getByText(/Pendiente de continuar/).waitFor();
+  assert.equal(lostResponseId,recoveryRef.id);assert.equal(recoverRequests,1);
+  await superPage.unroute('**/api/imports/personal');
+  await superPage.reload();await superPage.getByRole('button',{name:'Importar Personal',exact:true}).click();
+  const recoveredResponse=superPage.waitForResponse(r=>r.url().endsWith('/api/imports/personal')&&r.request().method()==='POST');
+  await recoveryRow.getByRole('button',{name:'Continuar importación',exact:true}).click();
+  const recovered=await(await recoveredResponse).json();assert.equal(recovered.importId,recoveryRef.id);assert.equal(recovered.status,'confirmed');
+  assert.equal(recovered.createdRows,1);assert.equal(recovered.updatedRows,1);assert.equal(recovered.errorRows,1);
+  await recoveryRow.getByRole('button',{name:'Ver resultado',exact:true}).waitFor();
+  assert.equal((await db.collection('imports_personal').count().get()).data().count,lotsBefore);
+  const header=(await recoveryRef.get()).data();assert.equal(header.createdBy.uid,'original-super');assert.equal(header.recoveredBy.uid,'e2e-super');
+  assert.equal((await recoveryRef.collection('rows').doc('000000').get()).data().personalId,originalIdentity);
+  assert.equal((await db.collection('audit_logs').where('action','==','resume_import_personal').where('importId','==',recoveryRef.id).get()).size,1);
+  await superPage.screenshot({path:path.join(output,'importacion-recuperada.png'),fullPage:true});
+  fs.writeFileSync(path.join(output,'r01.json'),JSON.stringify({sameImportId:true,recoveryRequestsAfterDoubleClick:recoverRequests,lostResponseRecovered:true,reloadRecovered:true,mismatchRejected:true,originalAuthorPreserved:true,existingPersonalIdPreserved:true,createdRows:1,updatedRows:1,rejectedRows:1,noExtraImport:true},null,2));
   // Closed extraordinary requests remain visible to the authorized unit.
   const {createCancellationRequest,cancelDirectly}=await import('../src/lib/server/cancellations.ts');
   const {prepareConfirmation}=await import('../src/lib/server/operations.ts');
@@ -168,7 +228,7 @@ try {
   await phone.screenshot({path:path.join(output,'reporte-pixel7.png'),fullPage:true});
   await phoneContext.close();
   assert.deepEqual(failures,[]);
-  fs.writeFileSync(path.join(output,'e2e.json'),JSON.stringify({project:'demo-app-faltas',passed:true,checkedAt:new Date().toISOString(),checks:['login','global-roster-selection-indexed','explicit-confirmation','persisted-unit-and-author','mobile-history','author-request','department-resolution','unit-notification','separate-superadmin-reports','parallel-conducts-independent-escalation','expired-article10-new-base','rapid-conduct-selection','personal-import-and-reopen','extraordinary-request-visible','pixel7-touch-menu','mobile-report'],browserErrors:failures},null,2));
+  fs.writeFileSync(path.join(output,'e2e.json'),JSON.stringify({project:'demo-app-faltas',passed:true,checkedAt:new Date().toISOString(),checks:['login','global-roster-selection-indexed','explicit-confirmation','persisted-unit-and-author','mobile-history','author-request','department-resolution','unit-notification','separate-superadmin-reports','parallel-conducts-independent-escalation','expired-article10-new-base','rapid-conduct-selection','personal-import-and-reopen','personal-import-recovery-reload-mismatch-lost-response-double-click','extraordinary-request-visible','pixel7-touch-menu','mobile-report'],browserErrors:failures},null,2));
   console.log('E2E: login, padrón global, confirmación, registro por unidad y móvil correctos');
 } catch(error) {
   if(browser) for(const [index,page] of browser.contexts().flatMap(c=>c.pages()).entries()) { await page.screenshot({path:path.join(output,`failure-${index}.png`),fullPage:true});fs.writeFileSync(path.join(output,`failure-${index}.txt`),await page.locator('body').innerText()); }

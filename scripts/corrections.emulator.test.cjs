@@ -302,6 +302,123 @@ test('F14: estadísticas reutilizadas se invalidan al editar una unidad',async()
   record('stats-cache',{cacheHit:true,invalidatedByMutation:true});
 });
 
+async function recoveryFixture(id, rows, staged=0) {
+  const {preparePersonalRows}=load('lib/imports/personal-rows.ts');
+  const {payloadHash}=load('lib/server/operations.ts');
+  const prepared=preparePersonalRows(rows), errors=prepared.filter(r=>r.errors.length).length;
+  const ref=db.collection('imports_personal').doc(id);
+  await ref.set({fileName:id+'.csv',hash:payloadHash(rows),totalRows:rows.length,status:'staging',createdRows:0,updatedRows:0,okRows:0,errorRows:errors,processedRows:errors,createdBy:{uid:'original-super',role:'super_admin',email:'original@example.test'},createdAt:Timestamp.fromMillis(1)});
+  for(let i=0;i<staged;i+=150){const batch=db.batch();prepared.slice(i,Math.min(i+150,staged)).forEach((r,j)=>batch.create(ref.collection('rows').doc(String(i+j).padStart(6,'0')),{...r,status:r.errors.length?'rejected':'pending'}));await batch.commit();}
+  return ref;
+}
+const recoveryRows=(base,n)=>Array.from({length:n},(_,i)=>({ci:String(base+i),grado:'Sgto.',nombres:'Persona',apellidos:'Recuperación ficticia '+i,sexo:'Masculino'}));
+const recover=(id,rows,extra={})=>load('app/api/imports/personal/route.ts').POST(req('super_admin','/api/imports/personal',{action:'resume_preparation',importId:id,rows,...extra}));
+async function importSnapshot(ref){const {payloadHash}=load('lib/server/operations.ts');return payloadHash({header:(await ref.get()).data(),rows:(await ref.collection('rows').orderBy('__name__').get()).docs.map(d=>[d.id,d.data()])});}
+
+test('R01: cabecera sin filas se recupera por ID y conserva autor, nombre y fecha',async()=>{
+  const rows=recoveryRows(88010000,3),ref=await recoveryFixture('r01-empty',rows);
+  const before=(await db.collection('imports_personal').count().get()).data().count;
+  const response=await recover(ref.id,rows,{fileName:'archivo-renombrado.csv'});assert.equal(response.status,200,await response.clone().text());
+  const body=await response.json();assert.equal(body.importId,ref.id);assert.equal(body.status,'ready');assert.equal(body.okRows,0);
+  const header=(await ref.get()).data();assert.equal(header.createdBy.uid,'original-super');assert.equal(header.fileName,ref.id+'.csv');assert.equal(header.createdAt.toMillis(),1);assert.equal(header.recoveredBy.uid,actors.super_admin.uid);
+  assert.equal((await db.collection('imports_personal').count().get()).data().count,before);
+  assert.equal((await ref.collection('rows').count().get()).data().count,3);
+  const snapshot=await importSnapshot(ref);assert.equal((await recover(ref.id,rows)).status,200);assert.equal(await importSnapshot(ref),snapshot);
+  assert.equal((await db.collection('audit_logs').where('action','==','resume_import_personal').where('importId','==',ref.id).get()).size,1);
+  record('R01-header',{sameImportId:true,rows:3,originalAuthorPreserved:true,recoveryAudits:1});
+});
+
+test('R01: contenido distinto y contratos inválidos se rechazan sin escrituras',async()=>{
+  const rows=recoveryRows(88020000,3),ref=await recoveryFixture('r01-mismatch',rows,1),before=await importSnapshot(ref);
+  for(const changed of [[{...rows[0],nombres:'Otro'},...rows.slice(1)],rows.slice(1),[...rows].reverse()])assert.equal((await recover(ref.id,changed)).status,409);
+  for(const extra of [{action:'unknown'},{operationId:'new-operation'},{unidadId:'GLOBAL'}])assert.equal((await recover(ref.id,rows,extra)).status,400);
+  for(const invalid of [[rows[0],null],[],new Array(2001).fill(rows[0])])assert.equal((await recover(ref.id,invalid)).status,400);
+  assert.equal((await recover('r01-does-not-exist',rows)).status,404);
+  assert.equal((await recover(ref.id,[{...rows[0],nombres:'x'.repeat(4_000_001)}])).status,413);
+  assert.equal(await importSnapshot(ref),before);
+  record('R01-validation',{mismatch409:true,malformed400:true,missing404:true,oversized413:true,noChanges:true});
+});
+
+test('R01: interrupciones repetidas después de bloques preservan filas y completan el lote',async()=>{
+  const rows=recoveryRows(88030000,301),ref=await recoveryFixture('r01-interrupted',rows);
+  const original=db.runTransaction;
+  for(const stop of [2,3]){
+    let calls=0;db.runTransaction=async function(...args){const value=await original.apply(this,args);if(++calls===stop)throw Error('Corte ficticio después de bloque confirmado');return value;};
+    try{assert.equal((await recover(ref.id,rows)).status,500);}finally{db.runTransaction=original;}
+    assert.equal((await ref.get()).data().status,'staging');
+    assert.equal((await ref.collection('rows').count().get()).data().count,(stop-1)*150);
+  }
+  const first=(await ref.collection('rows').doc('000000').get()).data();
+  assert.equal((await recover(ref.id,rows)).status,200);
+  assert.deepEqual((await ref.collection('rows').doc('000000').get()).data(),first);
+  assert.equal((await ref.get()).data().status,'ready');assert.equal((await ref.collection('rows').count().get()).data().count,301);
+  record('R01-interruptions',{interruptions:2,preparedRows:301,existingRowsPreserved:true});
+});
+
+test('R01: recuperaciones simultáneas y procesamiento conservan identidad y totales',async()=>{
+  const rows=recoveryRows(88040000,4);rows[3].grado='Grado inexistente ficticio';
+  const ref=await recoveryFixture('r01-concurrent',rows,2);
+  const existing=db.collection('personal').doc('r01-existing');await existing.set({ci:rows[0].ci,nombres:'Previo',apellidos:'Ficticio'});
+  const pair=await Promise.all([recover(ref.id,rows),recover(ref.id,rows)]);pair.forEach(r=>assert.equal(r.status,200));
+  const route=load('app/api/imports/personal/route.ts');
+  const concurrent=await Promise.all([recover(ref.id,rows),route.POST(req('super_admin','/api/imports/personal',{importId:ref.id}))]);concurrent.forEach(r=>assert.equal(r.status,200));
+  let result=await(await route.GET(req('super_admin','/api/imports/personal?importId='+ref.id))).json();
+  while(result.status!=='confirmed'){const r=await route.POST(req('super_admin','/api/imports/personal',{importId:ref.id}));assert.equal(r.status,200);result=await r.json();}
+  assert.equal(result.okRows,3);assert.equal(result.createdRows,2);assert.equal(result.updatedRows,1);assert.equal(result.errorRows,1);
+  assert.equal((await ref.collection('rows').doc('000000').get()).data().personalId,existing.id);
+  const snapshot=await importSnapshot(ref);
+  assert.equal((await recover(ref.id,rows)).status,200); // lost final response / retry
+  assert.equal(await importSnapshot(ref),snapshot);
+  assert.equal((await db.collection('audit_logs').where('action','==','resume_import_personal').where('importId','==',ref.id).get()).size,1);
+  assert.equal((await db.collection('audit_logs').where('action','==','import_personal').where('importId','==',ref.id).get()).size,3);
+  const fresh=await route.POST(req('super_admin','/api/imports/personal',{unidadId:'GLOBAL',rows,fileName:'nueva-carga.csv',operationId:'r01-explicit-new'}));assert.equal(fresh.status,200);
+  const newResult=await fresh.json();assert.notEqual(newResult.importId,ref.id);assert.equal(newResult.createdRows,0);assert.equal(newResult.updatedRows,3);
+  record('R01-concurrency',{sameImportId:true,applied:3,rejected:1,existingIdentityPreserved:true,applicationAudits:3,newOperationAllowed:true});
+});
+
+test('R01: lote en curso o fallido no se reinicia y mantiene su bloqueo y resultados',async()=>{
+  const rows=recoveryRows(88050000,2),ref=await recoveryFixture('r01-processing',rows);
+  assert.equal((await recover(ref.id,rows)).status,200);
+  await ref.update({status:'processing',owner:'other-worker',leaseUntil:Timestamp.fromMillis(Date.now()+60_000)});
+  const processing=await importSnapshot(ref);const active=await recover(ref.id,rows);assert.equal(active.status,200);assert.equal((await active.json()).processingActive,true);assert.equal(await importSnapshot(ref),processing);
+  const route=load('app/api/imports/personal/route.ts');assert.equal((await route.POST(req('super_admin','/api/imports/personal',{importId:ref.id}))).status,409);
+  await ref.update({leaseUntil:Timestamp.fromMillis(Date.now()-1000)});
+  assert.equal((await(await recover(ref.id,rows)).json()).processingActive,false);
+  const original=db.runTransaction;let calls=0;
+  db.runTransaction=async function(...args){const value=await original.apply(this,args);if(++calls===2)throw Error('Corte ficticio tras aplicar la primera persona');return value;};
+  try{assert.equal((await route.POST(req('super_admin','/api/imports/personal',{importId:ref.id}))).status,500);}finally{db.runTransaction=original;}
+  const partial=(await ref.get()).data();assert.equal(partial.status,'failed');assert.equal(partial.okRows,1);assert.equal(partial.createdRows,1);
+  const failed=await importSnapshot(ref);assert.equal((await recover(ref.id,rows)).status,200);assert.equal(await importSnapshot(ref),failed);
+  const resumed=await route.POST(req('super_admin','/api/imports/personal',{importId:ref.id}));assert.equal(resumed.status,200);assert.equal((await resumed.json()).okRows,2);
+});
+
+test('R01: permisos, revocación, mantenimiento y cambios durante bloques frenan la recuperación',async()=>{
+  const rows=recoveryRows(88060000,151),ref=await recoveryFixture('r01-access',rows),before=await importSnapshot(ref);
+  const route=load('app/api/imports/personal/route.ts');
+  for(const role of [null,'admin_dpto','admin_unidad','operador_unidad','visor_dpto']){const r=await route.POST(req(role,'/api/imports/personal',{action:'resume_preparation',importId:ref.id,rows}));assert.ok([401,403].includes(r.status));}
+  const userRef=db.collection('users').doc(actors.super_admin.uid);
+  for(const update of [{status:'bloqueado',isActive:false},{status:'activo',isActive:true,role:'admin_dpto'}]){await userRef.update(update);assert.ok([401,403].includes((await recover(ref.id,rows)).status));}
+  await userRef.update({status:'activo',isActive:true,role:'super_admin'});
+  assert.equal(await importSnapshot(ref),before);
+  const original=db.runTransaction;let calls=0;
+  db.runTransaction=async function(...args){const value=await original.apply(this,args);if(++calls===2)await db.collection('access_control').doc('maintenance').set({active:true,generation:0});return value;};
+  try{assert.equal((await recover(ref.id,rows)).status,503);}finally{db.runTransaction=original;await db.collection('access_control').doc('maintenance').set({active:false,generation:0});}
+  assert.equal((await ref.collection('rows').count().get()).data().count,150);assert.equal((await ref.get()).data().status,'staging');
+  calls=0;db.runTransaction=async function(...args){const value=await original.apply(this,args);if(++calls===2)await db.collection('access_control').doc('maintenance').set({active:false,generation:1});return value;};
+  try{assert.equal((await recover(ref.id,rows)).status,409);}finally{db.runTransaction=original;await db.collection('access_control').doc('maintenance').set({active:false,generation:0});}
+  assert.equal((await recover(ref.id,rows)).status,200);
+  record('R01-access',{rolesRestricted:true,profileChangeDenied:true,maintenanceAndGenerationStopProgress:true});
+});
+
+test('R01: metadatos y filas incompatibles no se reparan mediante sobrescritura',async()=>{
+  const rows=recoveryRows(88070000,2),ref=await recoveryFixture('r01-inconsistent',rows,1);
+  const row=ref.collection('rows').doc('000000');await row.update({'normalized.nombres':'No coincide'});
+  const before=await importSnapshot(ref);assert.equal((await recover(ref.id,rows)).status,409);assert.equal(await importSnapshot(ref),before);
+  const {FieldValue}=require('firebase-admin/firestore');await ref.update({hash:FieldValue.delete()});
+  const noHash=await importSnapshot(ref);assert.equal((await recover(ref.id,rows)).status,409);assert.equal(await importSnapshot(ref),noHash);
+  record('R01-invalid-existing',{rowConflictDenied:true,missingHashDenied:true,noOverwrite:true});
+});
+
 test('F05/F06: depuración incluye huérfanos, pausa escrituras y reanuda sin tocar accesos',async()=>{
   const {resetManifest,executeTestReset}=load('lib/server/test-data-reset.ts');
   await db.collection('imports_sanciones').doc('orphan-parent').collection('rows').doc('orphan-child').set({ficticio:true});

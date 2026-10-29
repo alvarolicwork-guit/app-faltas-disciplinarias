@@ -1,7 +1,7 @@
 "use client";
 import { parseDelimited, escapeHtml } from "@/lib/domain/delimited";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import { canBulkImportPersonal } from "@/lib/domain/roles";
 type ImportResult = {
   importId?: string;
   status?: string;
+  fileName?: string;
+  processingActive?: boolean;
   totalRows: number;
   okRows: number;
   createdRows?: number;
@@ -33,6 +35,7 @@ type CsvParseResult = {
 };
 
 const EXPECTED_HEADERS = ["ci", "grado", "nombres", "apellidos", "sexo", "estado"];
+const IMPORT_STATUS: Record<string, string> = {staging:"Preparación pendiente", ready:"Pendiente de continuar", processing:"En curso", failed:"Pendiente de reintento", confirmed:"Completada"};
 
 function normalizeHeader(raw: string): string {
   const cleaned = raw
@@ -93,6 +96,10 @@ export function ImportPage() {
   const { getUnitName } = useUnidades();
   const [file, setFile] = useState<File | null>(null);
   const [operationId,setOperationId]=useState("");
+  const [recovery,setRecovery]=useState<{id:string;fileName:string;totalRows:number}|null>(null);
+  const fileInput=useRef<HTMLInputElement>(null);
+  const fileVersion=useRef(0);
+  const taskBusy=useRef(false);
   const [unidadId] = useState("GLOBAL");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -124,27 +131,79 @@ export function ImportPage() {
   });
 
   const handleFile = useCallback((f: File | null) => {
-    setOperationId(crypto.randomUUID());
+    if(taskBusy.current) return;
+    const version=++fileVersion.current;
+    if(!recovery) setOperationId(crypto.randomUUID());
     setFile(f);
-    setResult(null);
+    if(!recovery) setResult(null);
     setPreview([]);
+    setDetectedDelimiter(null);
     if (!f) return;
     const reader = new FileReader();
     reader.onload = (e) => {
+      if(version!==fileVersion.current) return;
       const text = e.target?.result as string;
       const parsed = parseCsvAuto(text);
       setDetectedDelimiter(parsed.delimiter);
       setPreview(parsed.preview);
     };
     reader.readAsText(f);
-  }, []);
+  }, [recovery]);
+
+  function clearFile() {
+    fileVersion.current++;
+    setFile(null);setPreview([]);setDetectedDelimiter(null);
+    if(fileInput.current)fileInput.current.value="";
+  }
+
+  function beginTask() {
+    if(taskBusy.current)return false;
+    taskBusy.current=true;setBusy(true);return true;
+  }
+
+  async function continuePrepared(initial:ImportResult) {
+    let res=initial;
+    setResult(res);
+    // Each block must advance; bound attempts even if an unexpected state is returned.
+    for(let attempt=0;attempt<=res.totalRows;attempt++) {
+      if(!res.importId || !["ready","failed","processing"].includes(res.status??""))break;
+      if(res.status==="processing" && res.processingActive!==false)break;
+      const previous=res.okRows;
+      res=await post<ImportResult>("/api/imports/personal",{importId:res.importId});
+      setResult(res);
+      if(res.status==="ready" && res.okRows<=previous)break;
+    }
+    return res;
+  }
+
+  function showImportOutcome(res:ImportResult) {
+    if(res.status==="confirmed") {
+      setRecovery(null);clearFile();
+      const message=`${res.okRows} filas aplicadas, ${res.errorRows} filas con errores`;
+      if(res.errorRows)toast.warning("Importación completada con observaciones",message);
+      else toast.success("Importación completada",message);
+    }else if(res.status==="processing")toast.warning("Importación en curso","Espere unos segundos y vuelva a consultar este lote.");
+    else toast.warning("Importación pendiente","Los resultados guardados se conservaron. Puede continuar desde el listado.");
+  }
+
+  async function refreshAfterFailure(id?:string) {
+    try {
+      if(id) {
+        const current=await get<ImportResult>("/api/imports/personal?importId="+encodeURIComponent(id));
+        setResult(current);
+        if(current.status==="confirmed"){setRecovery(null);clearFile();}
+      }
+      await refreshImports();
+    }catch { /* Keep the original error and the selected recovery when offline. */ }
+  }
 
   async function handleImport() {
     if (!file || !unidadId) {
       toast.warning("Seleccione archivo y unidad");
       return;
     }
-    setBusy(true);
+    if(!beginTask())return;
+    let currentId=recovery?.id;
     try {
       const text = await file.text();
       const parsed = parseCsvAuto(text);
@@ -163,35 +222,37 @@ export function ImportPage() {
       const rows = parsed.rows;
 
       const unidadNombre = isGlobalImport ? "GLOBAL" : getUnitName(unidadId);
-      const payload = { unidadId, unidadNombre, rows, fileName:file.name, operationId };
-      let res = await post<ImportResult>("/api/imports/personal", payload);
-      setResult(res);
-      while(res.status === "ready") {
-        res=await post<ImportResult>("/api/imports/personal",{importId:res.importId});
-        setResult(res);
-      }
+      const payload = recovery
+        ? {action:"resume_preparation",importId:recovery.id,rows}
+        : {unidadId, unidadNombre, rows, fileName:file.name, operationId};
+      const initial = await post<ImportResult>("/api/imports/personal", payload);
+      currentId=initial.importId;
+      const res=await continuePrepared(initial);
       await refreshImports();
-      toast.success("Importación completada", `${res.okRows} registros exitosos, ${res.errorRows} errores`);
+      showImportOutcome(res);
     } catch (err) {
       toast.error("Error", err instanceof Error ? err.message : "No se pudo importar");
+      await refreshAfterFailure(currentId);
     } finally {
-      setBusy(false);
+      taskBusy.current=false;setBusy(false);
     }
   }
 
   async function resumeImport(id:string) {
-    setBusy(true);
+    if(!beginTask())return;
     try {
-      let res=await get<ImportResult>("/api/imports/personal?importId="+encodeURIComponent(id));
-      setResult(res);
-      if(res.status==="staging") {toast.warning("Vuelva a seleccionar el mismo archivo para completar su preparación");return;}
-      while(res.status!=="confirmed"){
-        res=await post<ImportResult>("/api/imports/personal",{importId:id});setResult(res);
+      const initial=await get<ImportResult>("/api/imports/personal?importId="+encodeURIComponent(id));
+      setRecovery(null);clearFile();
+      if(initial.status==="staging") {
+        setRecovery({id,fileName:initial.fileName??"Archivo original",totalRows:initial.totalRows});
+        setOperationId("");setResult(initial);return;
       }
+      const res=await continuePrepared(initial);
+      setResult(res);
       await refreshImports();
-      toast.success("Importación completada",res.okRows+" filas aplicadas en total");
-    }catch(error){toast.error("No se pudo continuar",error instanceof Error?error.message:"Error de importación");}
-    finally{setBusy(false);}
+      showImportOutcome(res);
+    }catch(error){toast.error("No se pudo continuar",error instanceof Error?error.message:"Error de importación");await refreshAfterFailure(id);}
+    finally{taskBusy.current=false;setBusy(false);}
   }
 
   async function handleCreatePersonal() {
@@ -301,6 +362,13 @@ export function ImportPage() {
         <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-4">Importar Personal desde CSV/Excel</h3>
 
+        {recovery && <div role="status" className="mb-4 rounded-xl border border-[var(--gold-500)] p-4">
+          <p className="font-semibold">Recuperar importación: {recovery.fileName}</p>
+          <p className="mt-1 text-sm">La importación quedó incompleta. Seleccione el mismo archivo para continuar desde donde se interrumpió.</p>
+          <p className="mt-1 text-sm">{recovery.totalRows} filas en el archivo original.</p>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={()=>{if(taskBusy.current)return;setRecovery(null);setOperationId("");clearFile();setResult(null);}}>Salir de la recuperación</Button>
+        </div>}
+
         <div className="p-3 rounded-xl bg-[var(--info-50)] border border-[var(--info-100)]">
           <p className="text-sm font-medium text-[var(--navy-800)]">Modo de importación: Global departamental</p>
           <p className="text-xs text-[var(--info-600)] mt-1">
@@ -322,7 +390,7 @@ export function ImportPage() {
         {/* Dropzone */}
         <div className="mt-4">
           <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer hover:border-[var(--gold-500)] hover:bg-[var(--gold-50)] transition-all">
-            <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+            <input ref={fileInput} aria-label={recovery?"Seleccionar archivo original":"Seleccionar archivo de personal"} type="file" className="hidden" disabled={busy} accept=".csv,.xlsx,.xls" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
             {file ? (
               <div className="text-center">
                 {Icons.fileText({ size: 28, className: "text-[var(--gold-500)] mx-auto mb-2" })}
@@ -332,7 +400,7 @@ export function ImportPage() {
             ) : (
               <div className="text-center">
                 {Icons.upload({ size: 28, className: "text-[var(--navy-300)] mx-auto mb-2" })}
-                <p className="text-sm text-[var(--navy-500)]">Arrastre un archivo o haga clic para seleccionar</p>
+                <p className="text-sm text-[var(--navy-500)]">{recovery?"Seleccionar archivo original":"Arrastre un archivo o haga clic para seleccionar"}</p>
                 <p className="text-xs text-[var(--navy-400)] mt-1">CSV o Excel (.xlsx, .xls)</p>
               </div>
             )}
@@ -356,14 +424,14 @@ export function ImportPage() {
         )}
 
         <Button className="w-full mt-4" variant="primary" size="lg" loading={busy} disabled={!file || !unidadId} onClick={handleImport} icon={Icons.upload({ size: 18 })}>
-          Importar Personal
+          {recovery?"Continuar esta importación":"Importar Personal"}
         </Button>
         </Card>
       )}
 
       {canUseBulkImport && <Card className="p-5">
         <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Importaciones de personal</h3><Button variant="ghost" onClick={()=>void refreshImports().catch(()=>toast.error("No se pudieron consultar las importaciones"))}>Actualizar</Button></div>
-        <div className="mt-3 space-y-2">{imports.map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] py-2"><span>{item.fileName} · {item.okRows??0}/{item.totalRows} filas aplicadas</span><Button variant="outline" size="sm" loading={busy} onClick={()=>void resumeImport(item.id)}>{item.status==="confirmed"?"Ver resultado":"Continuar importación"}</Button></div>)}</div>
+        <div className="mt-3 space-y-2">{imports.map(item=><div key={item.id} data-import-id={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] py-2"><span>{item.fileName} · {item.okRows??0}/{item.totalRows} filas aplicadas · {IMPORT_STATUS[item.status]??"Consultar estado"}</span><Button variant="outline" size="sm" loading={busy} onClick={()=>void resumeImport(item.id)}>{item.status==="confirmed"?"Ver resultado":"Continuar importación"}</Button></div>)}</div>
         {nextCursor && <Button variant="ghost" onClick={()=>void refreshImports(nextCursor).catch(()=>toast.error("No se pudo cargar la página"))}>Ver más importaciones</Button>}
       </Card>}
       <Card className="p-5">
@@ -390,6 +458,7 @@ export function ImportPage() {
       {result && (
         <Card className="p-5 animate-fade-in-up">
           <h3 className="text-base font-bold text-[var(--navy-900)] mb-3">Resultado de Importación</h3>
+          {result.status && <p className="mb-3 text-sm">Estado: {IMPORT_STATUS[result.status]??"Consultar estado"}{result.fileName?` · ${result.fileName}`:""}</p>}
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="p-3 rounded-xl bg-[var(--navy-50)] text-center">
               <p className="text-2xl font-bold text-[var(--navy-900)]">{result.totalRows}</p>

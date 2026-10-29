@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestUser } from "@/lib/auth/request-user";
 import { canBulkImportPersonal } from "@/lib/domain/roles";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { stagePersonalImport, processPersonalImport, personalImportResult } from "@/lib/server/personal-import";
+import { stagePersonalImport, processPersonalImport, personalImportResult, resumePersonalImportPreparation } from "@/lib/server/personal-import";
 import { OperationError, operationError } from "@/lib/server/operations";
 
 async function authorize(request:NextRequest) {
@@ -12,6 +12,9 @@ async function authorize(request:NextRequest) {
   return actor;
 }
 function validId(id:unknown):id is string{return typeof id==="string" && /^[\w-]{1,128}$/.test(id);}
+function validateRows(rows: unknown): asserts rows is Record<string, unknown>[] {
+  if(!Array.isArray(rows)||rows.length<1||rows.length>2000||rows.some((row:unknown)=>!row||typeof row!=="object"||Array.isArray(row)))throw new OperationError("Se requieren entre 1 y 2000 filas válidas como objetos",400);
+}
 
 export async function GET(request:NextRequest){
   try{
@@ -39,10 +42,17 @@ export async function POST(request:NextRequest){
     let body;
     try{body=JSON.parse(text);}catch{throw new OperationError("Formato JSON inválido",400);}
     if(!body || typeof body!=="object" || Array.isArray(body))throw new OperationError("Cuerpo inválido",400);
+    if(body.action !== undefined) {
+      if(body.action !== "resume_preparation" || !validId(body.importId) || body.operationId !== undefined || body.unidadId !== undefined)throw new OperationError("Solicitud de recuperación inválida",400);
+      validateRows(body.rows);
+      return NextResponse.json(await resumePersonalImportPreparation(actor,body.importId,body.rows));
+    }
     let id=body.importId;
-    if(!id){
+    if(id !== undefined){
+      if(!validId(id) || body.rows !== undefined || body.operationId !== undefined)throw new OperationError("Solicitud de continuación inválida",400);
+    }else{
       if(body.unidadId!=="GLOBAL")throw new OperationError("Solo se permite importación global",400);
-      if(!Array.isArray(body.rows)||body.rows.length<1||body.rows.length>2000||body.rows.some((row:unknown)=>!row||typeof row!=="object"||Array.isArray(row)))throw new OperationError("Se requieren entre 1 y 2000 filas válidas como objetos",400);
+      validateRows(body.rows);
       if(body.operationId!==undefined && (typeof body.operationId!=="string"||!/^[\w-]{8,100}$/.test(body.operationId)))throw new OperationError("Operación inválida",400);
       id=await stagePersonalImport(actor,body.rows,String(body.fileName??"api-import").slice(0,200),body.operationId);
     }

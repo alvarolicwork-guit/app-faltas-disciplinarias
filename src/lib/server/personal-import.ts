@@ -1,40 +1,101 @@
 import { randomUUID } from "node:crypto";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { DocumentData, DocumentReference, FieldValue, Firestore, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { ciKey } from "@/lib/domain/text-normalization";
 import { personalIndex } from "@/lib/domain/personal-index";
 import { preparePersonalRows } from "@/lib/imports/personal-rows";
 import { Actor, assertCurrentActor, audit, OperationError, payloadHash } from "./operations";
 
+type PreparedRows = ReturnType<typeof preparePersonalRows>;
+const importStates = new Set(["staging", "ready", "processing", "failed", "confirmed"]);
+
+function assertPreparationHeader(data: DocumentData | undefined, hash: string, total: number): asserts data is DocumentData {
+  if (!data) throw new OperationError("Importación no encontrada", 404);
+  if (typeof data.hash !== "string" || !importStates.has(data.status) || !Number.isInteger(data.totalRows)) {
+    throw new OperationError("La importación requiere revisión de sus datos de preparación");
+  }
+  if (data.hash !== hash || data.totalRows !== total) {
+    throw new OperationError("El archivo no coincide con esta importación. Seleccione el archivo original.");
+  }
+}
+
+function assertStagingCounters(data: DocumentData, prepared: PreparedRows) {
+  const rejected = prepared.filter(row => row.errors.length).length;
+  if (data.okRows !== 0 || data.createdRows !== 0 || data.updatedRows !== 0 || data.errorRows !== rejected || data.processedRows !== rejected) {
+    throw new OperationError("La preparación tiene resultados incompatibles; requiere revisión");
+  }
+}
+
+function assertPreparedRow(id: string, data: DocumentData, prepared: PreparedRows) {
+  const index = Number(id), expected = prepared[index];
+  if (!/^\d{6}$/.test(id) || !expected || id !== String(index).padStart(6, "0") ||
+      data.status !== (expected.errors.length ? "rejected" : "pending") || data.appliedAt || data.personalId ||
+      payloadHash({rowNumber:data.rowNumber, errors:data.errors, normalized:data.normalized}) !== payloadHash(expected)) {
+    throw new OperationError("Las filas preparadas no coinciden con el archivo; requiere revisión");
+  }
+}
+
+async function completePreparation(actor: Actor, db: Firestore, ref: DocumentReference, hash: string, prepared: PreparedRows, recovery: boolean) {
+  // Check every existing row before adding missing rows. Never reset persisted counters.
+  const staging = await db.runTransaction(async tx => {
+    await assertCurrentActor(tx, db, actor);
+    const data = (await tx.get(ref)).data();
+    assertPreparationHeader(data, hash, prepared.length);
+    if (data.status !== "staging") return false;
+    assertStagingCounters(data, prepared);
+    const existing = await tx.get(ref.collection("rows").limit(prepared.length + 1));
+    existing.docs.forEach(doc => assertPreparedRow(doc.id, doc.data(), prepared));
+    return true;
+  });
+  if (!staging) return;
+  for (let i = 0; i < prepared.length; i += 150) {
+    const chunk = prepared.slice(i, i + 150);
+    await db.runTransaction(async tx => {
+      await assertCurrentActor(tx, db, actor);
+      const data = (await tx.get(ref)).data();
+      assertPreparationHeader(data, hash, prepared.length);
+      if (data.status !== "staging") return;
+      assertStagingCounters(data, prepared);
+      const refs = chunk.map((_, j) => ref.collection("rows").doc(String(i + j).padStart(6, "0")));
+      const existing = await tx.getAll(...refs);
+      existing.forEach(doc => { if (doc.exists) assertPreparedRow(doc.id, doc.data()!, prepared); });
+      chunk.forEach((row, j) => {
+        if (!existing[j].exists) tx.create(refs[j], {...row, status:row.errors.length ? "rejected" : "pending"});
+      });
+    });
+  }
+  await db.runTransaction(async tx => {
+    await assertCurrentActor(tx, db, actor);
+    const data = (await tx.get(ref)).data();
+    assertPreparationHeader(data, hash, prepared.length);
+    if (data.status !== "staging") return;
+    assertStagingCounters(data, prepared);
+    const rows = await tx.get(ref.collection("rows").limit(prepared.length + 1));
+    if (rows.size !== prepared.length) throw new OperationError("La preparación no está completa; vuelva a continuar esta importación");
+    rows.docs.forEach(doc => assertPreparedRow(doc.id, doc.data(), prepared));
+    const now = Timestamp.now();
+    tx.update(ref, {status:"ready", updatedAt:now, ...(recovery ? {recoveredAt:now, recoveredBy:{uid:actor.uid, email:actor.email, role:actor.role}} : {})});
+    if (recovery) audit(tx, db, actor, "resume_import_personal", ref.id, {entity:"import_personal", importId:ref.id, totalRows:prepared.length});
+  });
+}
+
+export async function resumePersonalImportPreparation(actor: Actor, id: string, rows: Record<string, unknown>[]) {
+  const db = getAdminDb();
+  await completePreparation(actor, db, db.collection("imports_personal").doc(id), payloadHash(rows), preparePersonalRows(rows), true);
+  return personalImportResult(id);
+}
+
 export async function stagePersonalImport(actor:Actor, rows:Record<string,unknown>[], fileName:string, operationId?:string) {
   const prepared=preparePersonalRows(rows);
   const hash=payloadHash(rows), id="padron_"+payloadHash({uid:actor.uid,key:operationId??hash});
   const db=getAdminDb(), ref=db.collection("imports_personal").doc(id);
-  const ready=await db.runTransaction(async tx=>{
+  await db.runTransaction(async tx=>{
     await assertCurrentActor(tx,db,actor);
     const current=await tx.get(ref);
-    if(current.exists && current.data()!.hash!==hash)throw new OperationError("Esta operación corresponde a otro archivo");
-    if(current.exists && current.data()!.status!=="staging") return true;
-    tx.set(ref,{fileName,hash,totalRows:rows.length,status:"staging",createdRows:0,updatedRows:0,okRows:0,errorRows:prepared.filter(r=>r.errors.length).length,processedRows:prepared.filter(r=>r.errors.length).length,createdBy:{uid:actor.uid,email:actor.email,role:actor.role},createdAt:current.data()?.createdAt??Timestamp.now(),updatedAt:Timestamp.now()},{merge:true});
-    return false;
+    if(current.exists) {assertPreparationHeader(current.data(),hash,rows.length);return;}
+    tx.create(ref,{fileName,hash,totalRows:rows.length,status:"staging",createdRows:0,updatedRows:0,okRows:0,errorRows:prepared.filter(r=>r.errors.length).length,processedRows:prepared.filter(r=>r.errors.length).length,createdBy:{uid:actor.uid,email:actor.email,role:actor.role},createdAt:Timestamp.now(),updatedAt:Timestamp.now()});
   });
-  if(!ready){
-    for(let i=0;i<prepared.length;i+=150){
-      const chunk=prepared.slice(i,i+150);
-      await db.runTransaction(async tx=>{
-        await assertCurrentActor(tx,db,actor);
-        const current=await tx.get(ref);if(current.data()?.status!=="staging")return;
-        const refs=chunk.map((_,j)=>ref.collection("rows").doc(String(i+j).padStart(6,"0")));
-        const existing=await tx.getAll(...refs);
-        chunk.forEach((row,j)=>{if(!existing[j].exists)tx.create(refs[j],{...row,status:row.errors.length?"rejected":"pending"});});
-      });
-    }
-    await db.runTransaction(async tx=>{
-      await assertCurrentActor(tx,db,actor);
-      const current=await tx.get(ref);
-      if(current.data()?.status==="staging")tx.update(ref,{status:"ready",updatedAt:Timestamp.now()});
-    });
-  }
+  await completePreparation(actor,db,ref,hash,prepared,false);
   return id;
 }
 
@@ -43,7 +104,7 @@ export async function personalImportResult(id:string) {
   if(!snap.exists)throw new OperationError("Importación no encontrada",404);
   const data=snap.data()!;
   const rejected=await ref.collection("rows").where("status","==","rejected").get();
-  return {importId:id,...data,createdAt:data.createdAt?.toDate?.()?.toISOString()??null,updatedAt:data.updatedAt?.toDate?.()?.toISOString()??null,leaseUntil:data.leaseUntil?.toMillis?.()??null,errors:rejected.docs.flatMap(d=>d.data().errors??[])};
+  return {importId:id,...data,createdAt:data.createdAt?.toDate?.()?.toISOString()??null,updatedAt:data.updatedAt?.toDate?.()?.toISOString()??null,leaseUntil:data.leaseUntil?.toMillis?.()??null,processingActive:data.status==="processing" && (data.leaseUntil?.toMillis?.()??0)>Date.now(),errors:rejected.docs.flatMap(d=>d.data().errors??[])};
 }
 
 export async function processPersonalImport(actor:Actor,id:string) {
