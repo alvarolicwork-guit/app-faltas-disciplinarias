@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
+import { checkUnitSession } from './unit-session.e2e.mjs';
 
 if (process.env.GCLOUD_PROJECT !== 'demo-app-faltas' || !process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error('Only demo-app-faltas emulators');
 process.env.FIREBASE_PROJECT_ID='demo-app-faltas';
@@ -43,6 +44,7 @@ try {
   for(let i=0;i<100;i++){try{if((await fetch('http://localhost:3137')).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
   assert.ok(ready,'Local demo app did not start');
   browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL??(process.platform==='win32'?'chrome':undefined)});
+  await checkUnitSession(browser,db,output);
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   page.setDefaultTimeout(30_000);
   const failures=[];page.on('pageerror',e=>{failures.push(e.message);console.log('Browser error:',e.message);});
@@ -228,7 +230,7 @@ try {
   await phone.screenshot({path:path.join(output,'reporte-pixel7.png'),fullPage:true});
   await phoneContext.close();
   assert.deepEqual(failures,[]);
-  fs.writeFileSync(path.join(output,'e2e.json'),JSON.stringify({project:'demo-app-faltas',passed:true,checkedAt:new Date().toISOString(),checks:['login','global-roster-selection-indexed','explicit-confirmation','persisted-unit-and-author','mobile-history','author-request','department-resolution','unit-notification','separate-superadmin-reports','parallel-conducts-independent-escalation','expired-article10-new-base','rapid-conduct-selection','personal-import-and-reopen','personal-import-recovery-reload-mismatch-lost-response-double-click','extraordinary-request-visible','pixel7-touch-menu','mobile-report'],browserErrors:failures},null,2));
+  fs.writeFileSync(path.join(output,'e2e.json'),JSON.stringify({project:'demo-app-faltas',passed:true,checkedAt:new Date().toISOString(),checks:['unit-catalog-session-lifecycle-and-retry','login','global-roster-selection-indexed','explicit-confirmation','persisted-unit-and-author','mobile-history','author-request','department-resolution','unit-notification','separate-superadmin-reports','parallel-conducts-independent-escalation','expired-article10-new-base','rapid-conduct-selection','personal-import-and-reopen','personal-import-recovery-reload-mismatch-lost-response-double-click','extraordinary-request-visible','pixel7-touch-menu','mobile-report'],browserErrors:failures},null,2));
   console.log('E2E: login, padrón global, confirmación, registro por unidad y móvil correctos');
 } catch(error) {
   if(browser) for(const [index,page] of browser.contexts().flatMap(c=>c.pages()).entries()) { await page.screenshot({path:path.join(output,`failure-${index}.png`),fullPage:true});fs.writeFileSync(path.join(output,`failure-${index}.txt`),await page.locator('body').innerText()); }

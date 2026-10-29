@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUnidades, Unidad } from "@/hooks/use-unidades";
 
 export function UnidadesPage() {
-  const { unidades, loading, refresh } = useUnidades();
+  const { unidades, loading, error, refresh } = useUnidades();
   const [searchTerm, setSearchTerm] = useState("");
   const { post, patch, del } = useApi();
   const { invalidate } = useDataCache();
@@ -119,6 +119,11 @@ export function UnidadesPage() {
         </div>
 
         {/* Table/List */}
+        {error && <div role="alert" className="mb-4 rounded-xl border border-[var(--danger-500)] p-4">
+          <p className="font-semibold">No se pudieron cargar las unidades policiales</p>
+          <p className="mt-1 text-sm">{error}</p>
+          <Button className="mt-3" variant="outline" disabled={loading} onClick={() => void refresh()}>Reintentar carga</Button>
+        </div>}
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
@@ -159,13 +164,13 @@ export function UnidadesPage() {
               </table>
             </div>
           </div>
-        ) : (
+        ) : !error ? (
           <EmptyState
             title="Sin resultados"
             description={searchTerm ? "No se encontraron unidades con ese término." : "No hay unidades registradas."}
             icon={Icons.building({ size: 40 })}
           />
-        )}
+        ) : null}
       </Card>
 
       {/* Modal Crear/Editar */}

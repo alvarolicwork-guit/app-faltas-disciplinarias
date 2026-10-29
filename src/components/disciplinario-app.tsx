@@ -62,10 +62,12 @@ function SessionRouter() {
   };
 
   return (
-    <AppShell activeModule={activeModule} onNavigate={setActiveModule}>
-      <Notificaciones />
-      {moduleMap[activeModule]}
-    </AppShell>
+    <UnidadesProvider>
+      <AppShell activeModule={activeModule} onNavigate={setActiveModule}>
+        <Notificaciones />
+        {moduleMap[activeModule]}
+      </AppShell>
+    </UnidadesProvider>
   );
 }
 
@@ -79,9 +81,7 @@ export function DisciplinarioApp() {
     <AuthProvider>
       <ToastProvider>
         <DataCacheProvider>
-          <UnidadesProvider>
-            <AppRouter />
-          </UnidadesProvider>
+          <AppRouter />
         </DataCacheProvider>
       </ToastProvider>
     </AuthProvider>
