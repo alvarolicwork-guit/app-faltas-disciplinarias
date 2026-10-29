@@ -4,7 +4,7 @@ import { touchStats } from "./stats-cache";
 
 export const RESET_COLLECTIONS = ["personal","ci_registry","faltas","solicitudes_eliminacion_falta","imports_personal","imports_sanciones","notificaciones","confirmaciones","reincidencias_bloqueadas","transferencias_solicitudes","transferencias_logs","integraciones_sanciones","stats_cache"] as const;
 const preservedRoots=new Set(["users","unidades","access_control","audit_logs"]);
-const technicalActions=new Set(["create_user","update_user","delete_user_access","first_password_change","update_user_access","unit_role_handover","create_unidad","update_unidad","delete_unidad","generate_audit_report","production_data_cleanup"]);
+const technicalActions=new Set(["create_user","update_user","delete_user_access","delete_test_users","first_password_change","update_user_access","unit_role_handover","create_unidad","update_unidad","delete_unidad","replace_units_catalog","generate_audit_report","production_data_cleanup"]);
 const operationalEntity=/^(falta|personal|import|transferencia|reincidencia|integracion)/;
 const operationalAction=/^(create_falta|register_falta|request_delete_falta|resolve_delete_falta|expire_delete_falta|annul_falta|delete_falta|lower_reincidencia|import_personal|complete_import_personal|confirm_import|preview_import|revert_import|transfer_|approve_transfer|reject_transfer|expire_transfer|migrate_|rollback_chain|block_reincidencia)/;
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");

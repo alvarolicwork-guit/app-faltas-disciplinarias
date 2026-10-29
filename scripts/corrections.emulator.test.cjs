@@ -305,6 +305,7 @@ test('F14: estadísticas reutilizadas se invalidan al editar una unidad',async()
 test('F05/F06: depuración incluye huérfanos, pausa escrituras y reanuda sin tocar accesos',async()=>{
   const {resetManifest,executeTestReset}=load('lib/server/test-data-reset.ts');
   await db.collection('imports_sanciones').doc('orphan-parent').collection('rows').doc('orphan-child').set({ficticio:true});
+  for(const [id,action,entity] of [['legacy-access','delete_test_users','users'],['legacy-catalog','replace_units_catalog','unidades']])await db.collection('audit_logs').doc(id).set({action,entity,ficticio:true});
   const manifest=await resetManifest(db,'demo-app-faltas');
   assert.deepEqual(manifest.unknownCollections,[]);assert.deepEqual(manifest.unknownAuditActions,[]);
   assert.ok(manifest.paths.includes('imports_sanciones/orphan-parent/rows/orphan-child'));
@@ -320,6 +321,8 @@ test('F05/F06: depuración incluye huérfanos, pausa escrituras y reanuda sin to
   const after=await resetManifest(db,'demo-app-faltas');assert.equal(after.paths.length,0);
   assert.equal((await db.collection('users').count().get()).data().count,usersBefore);assert.equal((await db.collection('unidades').count().get()).data().count,unitsBefore);
   assert.equal((await auth.getUser(actors.super_admin.uid)).disabled,false);
+  assert.equal((await db.collection('audit_logs').doc('legacy-access').get()).exists,true);
+  assert.equal((await db.collection('audit_logs').doc('legacy-catalog').get()).exists,true);
   assert.equal((await db.collection('access_control').doc('maintenance').get()).data().generation,1);
   const {assertCurrentActor}=load('lib/server/operations.ts');
   await assert.rejects(()=>db.runTransaction(tx=>assertCurrentActor(tx,db,actors.super_admin)),/reiniciaron/);
