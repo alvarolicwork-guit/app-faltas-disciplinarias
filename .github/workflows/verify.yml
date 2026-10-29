@@ -21,6 +21,7 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:runtime
       - run: npm run test:domain
       - run: npm run test:imports
       - run: npm install -g firebase-tools@15.1.0
@@ -35,3 +36,4 @@ jobs:
           NEXT_PUBLIC_FIREBASE_API_KEY: fake-build-key
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-app-faltas.firebaseapp.com
           NEXT_PUBLIC_FIREBASE_APP_ID: fake-build-id
+      - run: npm run test:production-runtime

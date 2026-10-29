@@ -15,6 +15,15 @@ assert.equal(health.revision, expected, "Deployment is not the expected revision
 assert.equal(healthResponse.headers.get("x-frame-options"), "DENY");
 assert.match(healthResponse.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
 assert.match(healthResponse.headers.get("cache-control") ?? "", /no-store/);
+const readinessResponse = await fetch(origin + "/api/health?dependencies=1");
+assert.equal(readinessResponse.status, 200);
+const readiness = await readinessResponse.json();
+for (const [name, dependency] of Object.entries(readiness.dependencies ?? {})) assert.equal(dependency.loaded, true, name + " failed to load");
+assert.ok(readiness.dependencies?.auth?.loaded, "Missing Firebase Auth readiness evidence");
+for (const route of ["/api/me", "/api/internal/expire-requests"]) {
+  const response = await fetch(origin + route);
+  assert.equal(response.status, 401, route + " must reject anonymous access");
+}
 
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL ?? (process.platform === "win32" ? "chrome" : undefined) });
 const errors = [], frameMessages = [];
@@ -35,7 +44,7 @@ try {
   assert.equal(frameLoginVisible, false);
   assert.ok(frameMessages.some(message => /frame-ancestors|X-Frame-Options/i.test(message)), "Missing browser evidence of frame refusal");
   assert.deepEqual(errors, []);
-  const result = { checkedAt: new Date().toISOString(), expectedRevision: expected, observedRevision: health.revision, readOnly: true, authenticatedProduction: false, loginDesktop: true, loginAt390: true, externalFrameBlocked: true, frameMessages, headers: { csp: healthResponse.headers.get("content-security-policy"), frame: healthResponse.headers.get("x-frame-options"), cache: healthResponse.headers.get("cache-control"), nosniff: healthResponse.headers.get("x-content-type-options"), referrer: healthResponse.headers.get("referrer-policy") }, errors };
+  const result = { checkedAt: new Date().toISOString(), expectedRevision: expected, observedRevision: health.revision, readOnly: true, authenticatedProduction: false, dependenciesLoaded: true, anonymousApiRejected: true, loginDesktop: true, loginAt390: true, externalFrameBlocked: true, frameMessages, headers: { csp: healthResponse.headers.get("content-security-policy"), frame: healthResponse.headers.get("x-frame-options"), cache: healthResponse.headers.get("cache-control"), nosniff: healthResponse.headers.get("x-content-type-options"), referrer: healthResponse.headers.get("referrer-policy") }, errors };
   fs.writeFileSync(output + "/publicacion.json", JSON.stringify(result, null, 2) + "\n");
   console.log(JSON.stringify(result, null, 2));
 } finally { await browser.close(); }

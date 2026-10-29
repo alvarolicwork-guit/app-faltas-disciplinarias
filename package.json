@@ -12,6 +12,8 @@
     "lint": "eslint",
     "test:imports": "tsx --test src/lib/imports/historical-sanctions.test.ts src/lib/imports/recurrence-import.test.ts",
     "test:domain": "tsx --test src/lib/domain/sanction-policy.test.ts src/lib/domain/recurrence-chain.test.ts src/lib/domain/personal-search.test.ts src/lib/server/local-test-policy.test.ts src/lib/server/cron-identity.test.ts",
+    "test:runtime": "node --no-experimental-require-module scripts/check-auth-runtime.cjs",
+    "test:production-runtime": "node scripts/check-production-runtime.mjs",
     "test:emulator": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.test.json \"node --import tsx --test --test-concurrency=1 src/lib/server/workflow.emulator.test.ts src/lib/server/recurrence.emulator.test.ts\"",
     "test:rejection": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.rejection.test.json \"node --import tsx --test --test-concurrency=1 src/lib/server/rejection.emulator.test.ts src/lib/server/workflow.emulator.test.ts\"",
     "test:e2e": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.test.json \"node --import tsx scripts/e2e-functional.mjs\"",
@@ -46,6 +48,7 @@
     "typescript": "^5"
   },
   "overrides": {
+    "jwks-rsa": { "jose": "^5.10.0" },
     "@grpc/grpc-js": "^1.14.6",
     "@firebase/app": "0.14.11",
     "@firebase/app-compat": "0.5.11"
