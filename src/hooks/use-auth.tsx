@@ -37,6 +37,7 @@ export type SessionUser = {
   apellidos?: string | null;
   nombreCompleto?: string | null;
   mustChangePassword?: boolean;
+  dataGeneration?: number;
 };
 
 type AuthContextValue = {

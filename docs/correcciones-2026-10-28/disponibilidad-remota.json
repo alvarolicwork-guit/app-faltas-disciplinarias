@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-10-29T02:56:36.079Z",
+  "firestore": {
+    "status": 429,
+    "error": {
+      "code": 429,
+      "status": "RESOURCE_EXHAUSTED",
+      "reasons": []
+    }
+  },
+  "firebase": {
+    "status": 200,
+    "projectNumber": "82111807282",
+    "error": {
+      "code": null,
+      "status": null,
+      "reasons": []
+    }
+  },
+  "billing": {
+    "status": 403,
+    "billingEnabled": null,
+    "error": {
+      "code": 403,
+      "status": "PERMISSION_DENIED",
+      "reasons": [
+        "SERVICE_DISABLED"
+      ]
+    }
+  },
+  "scheduler": {
+    "status": 403,
+    "jobs": [],
+    "error": {
+      "code": 403,
+      "status": "PERMISSION_DENIED",
+      "reasons": [
+        "SERVICE_DISABLED"
+      ]
+    }
+  }
+}

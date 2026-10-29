@@ -1,0 +1,36 @@
+name: Expire cancellation requests
+on:
+  schedule:
+    - cron: '3-59/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/expire-requests.yml', 'src/lib/server/cron-identity.ts']
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: production-request-expiry
+  cancel-in-progress: false
+jobs:
+  expire:
+    if: github.repository_id == '1244004584' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            for (let attempt = 0; attempt < 7; attempt++) {
+              const token = await core.getIDToken('app-faltas-expire-requests');
+              const response = await fetch('https://app-faltas-disciplinarias.vercel.app/api/internal/expire-requests', {
+                headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(90000)
+              });
+              if (response.ok) {
+                const result = await response.json();
+                core.info(JSON.stringify({scanned: result.scanned, expired: result.expired, hasMore: result.hasMore}));
+                return;
+              }
+              if (![401, 503].includes(response.status) || attempt === 6) throw new Error('Expiry endpoint returned HTTP ' + response.status);
+              await new Promise(resolve => setTimeout(resolve, 30000));
+            }

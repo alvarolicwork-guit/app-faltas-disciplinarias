@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-10-28T16:41:30.115Z",
+  "secretScan": {
+    "commits": 18,
+    "textBlobs": 338,
+    "patterns": 4,
+    "matches": [],
+    "limits": "Pattern-based review only; no credential validation and no guarantee of absence"
+  },
+  "csv": {
+    "function": "actual escapeCsv extracted from source",
+    "input": "=1+1",
+    "output": "\"=1+1\"",
+    "formulaNeutralized": false
+  },
+  "cleanup": {
+    "coversHistoricalImports": false,
+    "coversNotifications": false,
+    "coversConfirmations": false,
+    "hasPerRecordTestFilter": false
+  }
+}

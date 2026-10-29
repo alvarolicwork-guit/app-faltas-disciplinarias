@@ -65,7 +65,8 @@ export function PersonalPage() {
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<PersonalRow[]>([]);
-  const [personalTotal, setPersonalTotal] = useState(0);
+  const [personalTotal, setPersonalTotal] = useState<number|null>(0);
+  const pageCursors = useRef(new Map<number,string>());
   const [personalOffset, setPersonalOffset] = useState(0);
   const [personalNextOffset, setPersonalNextOffset] = useState<number | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState("");
@@ -112,13 +113,16 @@ export function PersonalPage() {
       if (effectiveUnitId) params.set("unidadId", effectiveUnitId);
       if (queryText) params.set("q", queryText);
       params.set("offset", String(options?.offset ?? 0));
+      if(!(options?.offset)) pageCursors.current.clear();
+      const cursor=pageCursors.current.get(options?.offset??0);
+      if(cursor)params.set("cursor",cursor);
       params.set("limit", "50");
 
       const cacheScope = effectiveUnitId ? `unidad:${effectiveUnitId}` : "global";
       const cacheQuery = queryText ? queryText.toLowerCase() : "all";
       const payload = await fetchWithCache(
         `personal:${cacheScope}:${cacheQuery}:${options?.offset ?? 0}`,
-        () => get<{ data: PersonalRow[]; total: number; nextOffset: number | null }>(`/api/personal?${params.toString()}`),
+        () => get<{ data: PersonalRow[]; total: number|null; nextOffset: number | null; nextCursor?:string|null }>(`/api/personal?${params.toString()}`),
         { ttlMs: queryText ? 2 * 60 * 1000 : 5 * 60 * 1000, force: options?.force },
       );
       if (version !== personalFetchVersion.current) return;
@@ -126,7 +130,9 @@ export function PersonalPage() {
       setAppliedSearch(queryText);
       setPersonalTotal(payload.data.total);
       setPersonalOffset(options?.offset ?? 0);
-      setPersonalNextOffset(payload.data.nextOffset);
+      const nextOffset=payload.data.nextCursor?(options?.offset??0)+50:payload.data.nextOffset;
+      if(payload.data.nextCursor)pageCursors.current.set(nextOffset!,payload.data.nextCursor);
+      setPersonalNextOffset(nextOffset);
       setPersonalUpdatedAt(payload.storedAt);
     } catch (error) {
       if (version !== personalFetchVersion.current) return;
@@ -341,10 +347,10 @@ export function PersonalPage() {
           ) : loading ? (
             <div className="space-y-2">{[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-11 rounded-xl" />)}</div>
           ) : orderedRows.length === 0 ? (
-            <EmptyState title="Sin resultados" description={effectiveUnitId ? "No hay personal sancionado en esta unidad o no coincide la búsqueda." : "No se encontró personal con ese criterio en el comando."} />
+            <div><EmptyState title={personalNextOffset!==null?"Continúe la búsqueda":"Sin resultados"} description={personalNextOffset!==null?"Quedan registros por revisar. Puede continuar con la siguiente página.":effectiveUnitId ? "No hay personal sancionado en esta unidad o no coincide la búsqueda." : "No se encontró personal con ese criterio en el comando."} />{personalNextOffset!==null&&<Button onClick={()=>void fetchPersonal({query:appliedSearch,offset:personalNextOffset})}>Continuar búsqueda</Button>}</div>
           ) : (
             <div className="overflow-auto rounded-xl border border-[var(--border)]">
-              <div className="flex flex-wrap gap-3 items-center p-3"><span>{personalTotal} personas; mostrando desde {personalOffset + 1}{appliedSearch ? ` · Búsqueda: ${appliedSearch}` : ""}</span><Button disabled={loading || personalOffset === 0} onClick={() => { void fetchPersonal({ force: true, query: appliedSearch, offset: Math.max(0, personalOffset - 50) }); }}>Anterior</Button><Button disabled={loading || personalNextOffset === null} onClick={() => { void fetchPersonal({ force: true, query: appliedSearch, offset: personalNextOffset! }); }}>Siguiente</Button></div>
+              <div className="flex flex-wrap gap-3 items-center p-3"><span>{personalTotal===null?`${rows.length} personas en esta página`:`${personalTotal} personas`}{appliedSearch ? ` · Búsqueda: ${appliedSearch}` : ""}</span><Button disabled={loading || personalOffset === 0} onClick={() => { void fetchPersonal({ force: true, query: appliedSearch, offset: Math.max(0, personalOffset - 50) }); }}>Anterior</Button><Button disabled={loading || personalNextOffset === null} onClick={() => { void fetchPersonal({ force: true, query: appliedSearch, offset: personalNextOffset! }); }}>Siguiente</Button></div>
               <table className="min-w-full text-sm">
                 <thead className="bg-[var(--navy-50)]">
                   <tr>

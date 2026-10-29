@@ -1,0 +1,154 @@
+{
+  "checkedAt": "2026-10-29T03:19:11.855Z",
+  "project": "control-disciplinario-comando",
+  "readOnly": true,
+  "rules": {
+    "name": "f5f7552a-7c07-48ff-a2af-d06570d84ef1",
+    "matchesLocal": true,
+    "sha256": "38a18835769c71bef2054fd429af1bb1dcf732d07b0085a0a4a9059db15af65f"
+  },
+  "declaredIndexes": 35,
+  "matchedIndexes": [
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "faltas",
+      "state": "READY"
+    },
+    {
+      "collection": "personal",
+      "state": "READY"
+    },
+    {
+      "collection": "users",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_logs",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_logs",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "transferencias_solicitudes",
+      "state": "READY"
+    },
+    {
+      "collection": "solicitudes_eliminacion_falta",
+      "state": "READY"
+    },
+    {
+      "collection": "solicitudes_eliminacion_falta",
+      "state": "READY"
+    },
+    {
+      "collection": "reincidencias_bloqueadas",
+      "state": "READY"
+    },
+    {
+      "collection": "reincidencias_bloqueadas",
+      "state": "READY"
+    },
+    {
+      "collection": "reincidencias_bloqueadas",
+      "state": "READY"
+    },
+    {
+      "collection": "reincidencias_bloqueadas",
+      "state": "READY"
+    },
+    {
+      "collection": "personal",
+      "state": "READY"
+    },
+    {
+      "collection": "solicitudes_eliminacion_falta",
+      "state": "READY"
+    },
+    {
+      "collection": "notificaciones",
+      "state": "READY"
+    },
+    {
+      "collection": "notificaciones",
+      "state": "READY"
+    },
+    {
+      "collection": "notificaciones",
+      "state": "READY"
+    },
+    {
+      "collection": "notificaciones",
+      "state": "READY"
+    },
+    {
+      "collection": "notificaciones",
+      "state": "READY"
+    },
+    {
+      "collection": "notificaciones",
+      "state": "READY"
+    }
+  ],
+  "allReady": true
+}

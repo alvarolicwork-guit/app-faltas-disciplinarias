@@ -2,25 +2,30 @@
   "name": "app-faltas",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test:imports": "tsx --test src/lib/imports/historical-sanctions.test.ts src/lib/imports/recurrence-import.test.ts",
-    "test:domain": "tsx --test src/lib/domain/sanction-policy.test.ts src/lib/domain/recurrence-chain.test.ts src/lib/domain/personal-search.test.ts src/lib/server/local-test-policy.test.ts",
+    "test:domain": "tsx --test src/lib/domain/sanction-policy.test.ts src/lib/domain/recurrence-chain.test.ts src/lib/domain/personal-search.test.ts src/lib/server/local-test-policy.test.ts src/lib/server/cron-identity.test.ts",
     "test:emulator": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.test.json \"node --import tsx --test --test-concurrency=1 src/lib/server/workflow.emulator.test.ts src/lib/server/recurrence.emulator.test.ts\"",
     "test:rejection": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.rejection.test.json \"node --import tsx --test --test-concurrency=1 src/lib/server/rejection.emulator.test.ts src/lib/server/workflow.emulator.test.ts\"",
     "test:e2e": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.test.json \"node --import tsx scripts/e2e-functional.mjs\"",
+    "test:corrections": "firebase emulators:exec --only \"firestore,auth\" --project demo-app-faltas --config firebase.rejection.test.json \"node --import tsx --test --test-concurrency=1 scripts/corrections.emulator.test.cjs\"",
     "bootstrap:super-admin": "node --env-file=.env.local scripts/bootstrap-super-admin.mjs",
     "smoke:reincidencia": "node --env-file=.env.local scripts/smoke-reincidencia.mjs",
-    "data:cleanup:preview": "node --env-file=.env.local scripts/cleanup-production-data.mjs --mode=preview",
-    "data:cleanup": "node --env-file=.env.local scripts/cleanup-production-data.mjs --mode=execute",
+    "data:cleanup:preview": "node --env-file=.env.local --import tsx scripts/cleanup-production-data.mjs --mode=preview",
+    "data:cleanup": "node --env-file=.env.local --import tsx scripts/cleanup-production-data.mjs --mode=execute",
     "dev:demo": "node scripts/run-local-demo.mjs"
   },
   "dependencies": {
     "firebase": "^12.12.1",
-    "firebase-admin": "^13.8.0",
+    "firebase-admin": "^14.5.0",
+    "jose": "^6.2.13",
     "next": "^16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -35,8 +40,14 @@
     "debug": "^4.4.3",
     "eslint": "^9",
     "eslint-config-next": "^16.4.3",
+    "playwright": "^1.64.1",
     "tailwindcss": "^4",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6",
+    "@firebase/app": "0.14.11",
+    "@firebase/app-compat": "0.5.11"
   }
 }

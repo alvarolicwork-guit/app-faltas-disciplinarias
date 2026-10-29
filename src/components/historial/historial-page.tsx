@@ -20,7 +20,7 @@ import type { SancionView } from "./contenido-sancion";
 
 type EstadoFilter = "registrada" | "anulada" | "todas";
 type Pending = { id: string; faltaId: string; estado: string; createdAt?: string; expiresAt?: string | null };
-type Result = {key: string; rows: SancionView[]; requests: Pending[]; requestError?: string; error?: string};
+type Result = {key: string; rows: SancionView[]; requests: Pending[]; nextCursor?:string|null; requestError?: string; error?: string};
 
 export function HistorialPage({ onOpenRequests }: { onOpenRequests: (id?: string) => void }) {
   const { get, post } = useApi();
@@ -57,20 +57,21 @@ export function HistorialPage({ onOpenRequests }: { onOpenRequests: (id?: string
   const pendingByFalta = new Map(requests.filter(row => pendingRequest(row, now)).map(row => [row.faltaId, row.id]));
   const isLoading = !!effectiveUnitId && (loading || !currentResult);
 
-  const loadData = useCallback(async (force = false) => {
+  const loadData = useCallback(async (force = false, cursor?:string) => {
     if (!effectiveUnitId) return;
     const version = ++loadVersion.current;
     setLoading(true);
-    const params = new URLSearchParams({scope:"unit", unidadId:effectiveUnitId});
+    const params = new URLSearchParams({scope:"unit", unidadId:effectiveUnitId,pageSize:"50"});
+    if(cursor)params.set("cursor",cursor);
     if (estadoFilter !== "todas") params.set("estado", estadoFilter);
     if (appliedSearch) params.set("q", appliedSearch);
     try {
       const [sanctions, requestResult] = await Promise.all([
-        fetchWithCache(queryKey, () => get<{data:SancionView[]}>(`/api/faltas?${params}`), {force, ttlMs:60_000}),
+        fetchWithCache(queryKey+":"+(cursor??"inicio"), () => get<{data:SancionView[];nextCursor:string|null}>(`/api/faltas?${params}`), {force, ttlMs:60_000}),
         canReadRequests ? get<{data:Pending[]}>("/api/faltas/solicitudes?estado=pendiente").then(data => ({data:data.data, error:undefined as string | undefined})).catch(error => ({data:[] as Pending[], error:error instanceof Error ? error.message : "No se pudieron comprobar las solicitudes pendientes"})) : Promise.resolve({data:[] as Pending[], error:undefined}),
       ]);
       if (version !== loadVersion.current) return;
-      setResult({key:queryKey, rows:sanctions.data.data, requests:requestResult.data, requestError:requestResult.error});
+      setResult(previous=>({key:queryKey, rows:cursor&&previous?.key===queryKey?[...previous.rows,...sanctions.data.data]:sanctions.data.data,nextCursor:sanctions.data.nextCursor, requests:requestResult.data, requestError:requestResult.error}));
       setNow(Date.now());
     } catch (error) {
       if (version === loadVersion.current) setResult({key:queryKey, rows:[], requests:[], error:error instanceof Error ? error.message : "No se pudieron cargar las sanciones"});
@@ -250,6 +251,7 @@ export function HistorialPage({ onOpenRequests }: { onOpenRequests: (id?: string
         </div>
       </Modal>
 
+      {currentResult?.nextCursor&&<Button variant="outline" loading={loading} onClick={()=>void loadData(true,currentResult.nextCursor!)}>Ver más sanciones</Button>}
       <EfectivoDetail falta={selectedFalta} open={!!selectedFalta} onClose={() => setSelectedFalta(null)} />
       {selectedPerson && <HistorialPersonal key={selectedPerson.id + effectiveUnitId} person={selectedPerson} initialUnitId={effectiveUnitId} unitName={getUnitName(effectiveUnitId)} onClose={() => setSelectedPerson(null)} />}
     </div>;

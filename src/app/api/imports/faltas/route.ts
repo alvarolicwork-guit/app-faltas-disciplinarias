@@ -20,6 +20,7 @@ import {
   type UnitImportLookup,
 } from "@/lib/imports/historical-sanctions";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { assertCurrentActor } from "@/lib/server/operations";
 
 export const runtime = "nodejs";
 
@@ -74,13 +75,21 @@ export async function GET(request: NextRequest) {
     if (auth.response) return auth.response;
 
     const db = getAdminDb();
-    const snap = await db.collection("imports_sanciones")
+    let query = db.collection("imports_sanciones")
       .orderBy("createdAt", "desc")
-      .limit(10)
-      .get();
+      .limit(20);
+    const cursor = request.nextUrl.searchParams.get("cursor");
+    if (cursor) {
+      if (!/^[\w-]{1,128}$/.test(cursor)) return badRequest("Cursor inválido");
+      const last = await db.collection("imports_sanciones").doc(cursor).get();
+      if (!last.exists) return badRequest("Cursor no encontrado");
+      query = query.startAfter(last);
+    }
+    const snap = await query.get();
 
     return NextResponse.json({
       enabled: historicalImportEnabled(),
+      nextCursor: snap.size === 20 ? snap.docs.at(-1)!.id : null,
       data: snap.docs.map((doc) => {
         const item = doc.data();
         return {
@@ -222,7 +231,9 @@ export async function POST(request: NextRequest) {
     const hash = fileHash(buffer);
     const importRef = db.collection("imports_sanciones").doc();
 
-    await importRef.set({
+    await db.runTransaction(async tx => {
+      await assertCurrentActor(tx, db, actor);
+      tx.create(importRef, {
       fileName: file.name.slice(0, 180),
       fileHash: hash,
       fileSize: file.size,
@@ -241,23 +252,22 @@ export async function POST(request: NextRequest) {
         email: actor.email,
         role: actor.role,
       },
+      });
     });
-
-    let batch = db.batch();
-    let count = 0;
-    for (const row of previewRows) {
-      batch.set(importRef.collection("rows").doc(row.rowKey), row);
-      count += 1;
-      if (count >= 400) {
-        await batch.commit();
-        batch = db.batch();
-        count = 0;
-      }
+    for (let i=0;i<previewRows.length;i+=200) {
+      await db.runTransaction(async tx => {
+        await assertCurrentActor(tx, db, actor);
+        const root = await tx.get(importRef);
+        if (root.data()?.status !== "building_preview") throw new Error("La preparación del lote cambió");
+        for (const row of previewRows.slice(i,i+200)) tx.set(importRef.collection("rows").doc(row.rowKey),row);
+      });
     }
-    if (count > 0) await batch.commit();
-    await importRef.update({ status: "preview", updatedAt: Timestamp.now() });
-
-    await db.collection("audit_logs").add({
+    await db.runTransaction(async tx => {
+      await assertCurrentActor(tx, db, actor);
+      const current = await tx.get(importRef);
+      if (!current.exists) throw new Error("La preparación del lote cambió");
+      tx.update(importRef, { status: "preview", updatedAt: Timestamp.now() });
+      tx.set(db.collection("audit_logs").doc(), {
       actorUid: actor.uid,
       actorEmail: actor.email,
       actorRole: actor.role,
@@ -275,6 +285,7 @@ export async function POST(request: NextRequest) {
         duplicateRows,
       },
       createdAt: now,
+      });
     });
 
     return NextResponse.json({

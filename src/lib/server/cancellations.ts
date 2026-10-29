@@ -1,6 +1,7 @@
 import { DocumentData, Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { assertDataAvailable } from "./maintenance";
 import { ancestorBlock, ancestorEligibility, authorUid, cancellationDeadline, canRequestCancellation, dependentIds, lowerDependentChain, requestDeadline, REQUEST_DAYS, DAY_MS } from "@/lib/domain/sanction-policy";
 import { Actor, actorData, assertCurrentActor, audit, notification, OperationError, readConfirmation, payloadHash } from "./operations";
 import { skipLocalRecurrenceWait } from "./local-test-policy";
@@ -12,6 +13,7 @@ const directSchema = z.object({ id: idSchema, motivo: z.string().trim().min(8).m
 export async function expireRequest(id: string): Promise<boolean> {
   const db = getAdminDb();
   return db.runTransaction(async (tx) => {
+    await assertDataAvailable(tx, db);
     const ref = db.collection("solicitudes_eliminacion_falta").doc(id);
     const snap = await tx.get(ref);
     const row = snap.data();

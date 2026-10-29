@@ -10,13 +10,14 @@ import { useApi } from "@/hooks/use-api";
 import { useAuth, canReadGlobalInfo } from "@/hooks/use-auth";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useUnidades } from "@/hooks/use-unidades";
+import { boliviaDate, previousMonthDate } from "@/lib/domain/institutional-date";
 
 type ReporteData = {
   periodo: string;
   totalFaltas: number;
   porArticulo: { articulo: string; count: number }[];
   porConducta?:{articulo:string;inciso:string;sanciones:number;reincidencias:number;personas:number;cadenas:number}[];
-  porUnidad: { unidadNombre: string; count: number }[];
+  porUnidad: { unidadId: string; unidadNombre: string; count: number }[];
   reincidencias: number;
   reincidenciasBloqueadas?: number;
   sancionesPorReincidencia?:number;
@@ -33,12 +34,8 @@ export function ReportesPage() {
   const isGlobal = canReadGlobalInfo(sessionUser?.role ?? "");
 
   const [unidadId, setUnidadId] = useState(isGlobal ? "" : (sessionUser?.unidadId ?? ""));
-  const [fechaInicio, setFechaInicio] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
-  });
-  const [fechaFin, setFechaFin] = useState(new Date().toISOString().slice(0, 10));
+  const [fechaInicio, setFechaInicio] = useState(() => previousMonthDate(boliviaDate()));
+  const [fechaFin, setFechaFin] = useState(() => boliviaDate());
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ReporteData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -147,8 +144,8 @@ export function ReportesPage() {
               <p className="text-xs text-[var(--navy-400)] mt-1">Total Sanciones</p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-3xl font-bold text-[var(--danger-600)]">{data.reincidenciasBloqueadas ?? data.reincidencias}</p>
-              <p className="text-xs text-[var(--navy-400)] mt-1">Reincidencias Bloqueadas</p>
+              <p className="text-3xl font-bold text-[var(--danger-600)]">{data.sancionesPorReincidencia ?? 0}</p>
+              <p className="text-xs text-[var(--navy-400)] mt-1">Reincidencias registradas</p>
             </Card>
             <Card className="p-4 text-center">
               <p className="text-3xl font-bold text-[var(--info-600)]">{data.porUnidad?.length ?? 0}</p>

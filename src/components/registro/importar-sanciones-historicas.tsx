@@ -8,6 +8,7 @@ import { Badge, Card } from "@/components/ui/primitives";
 import { useApi } from "@/hooks/use-api";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
+import { csvCell } from "@/lib/domain/audit-report";
 
 type Issue = {
   field: string;
@@ -103,6 +104,7 @@ export function ImportarSancionesHistoricas() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [imports, setImports] = useState<ImportSummary[]>([]);
+  const [nextCursor, setNextCursor] = useState<string|null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -111,9 +113,10 @@ export function ImportarSancionesHistoricas() {
   const refreshImports = useCallback(async () => {
     setLoadingList(true);
     try {
-      const payload = await get<{ enabled: boolean; data: ImportSummary[] }>("/api/imports/faltas");
+      const payload = await get<{ enabled: boolean; data: ImportSummary[]; nextCursor:string|null }>("/api/imports/faltas");
       setEnabled(payload.enabled);
       setImports(payload.data);
+      setNextCursor(payload.nextCursor);
     } catch (error) {
       toast.error(
         "No se pudo consultar importaciones",
@@ -130,8 +133,7 @@ export function ImportarSancionesHistoricas() {
   }
 
   function escapeCsv(value: unknown): string {
-    const text = value == null ? "" : String(value);
-    return `"${text.replace(/"/g, "\"\"")}"`;
+    return csvCell(value);
   }
 
   function saveRejectedRows(rows: PreviewRow[], fileName: string, importId: string) {
@@ -251,13 +253,16 @@ export function ImportarSancionesHistoricas() {
 
     setConfirming(true);
     try {
-      const result = await post<{ createdRows: number; skippedRows: number }>(
+      let result = await post<{ createdRows: number; skippedRows: number; pendingRows:number; status:string }>(
         `/api/imports/faltas/${preview.importId}/confirm`,
         { confirmation },
       );
+      while(result.pendingRows>0){
+        result=await post<typeof result>(`/api/imports/faltas/${preview.importId}/confirm`,{confirmation});
+      }
       toast.success(
         "Importación confirmada",
-        `${result.createdRows} sanciones registradas y ${result.skippedRows} filas rechazadas.`,
+        `${result.createdRows} sanciones registradas en total y ${result.skippedRows} filas omitidas.`,
       );
       setPreview((current) => current ? { ...current, status: "confirmed", canConfirm: false } : null);
       setFile(null);
@@ -515,6 +520,10 @@ export function ImportarSancionesHistoricas() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" loading={confirming} onClick={async()=>{
+                          try{setPreview(await get<PreviewResult>(`/api/imports/faltas/${item.id}`));setFile(null);}
+                          catch(error){toast.error("No se pudo abrir la importación",error instanceof Error?error.message:"Error");}
+                        }}>Abrir / continuar</Button>
                         {item.errorRows + item.duplicateRows > 0 && (
                           <Button
                             variant="outline"
@@ -544,6 +553,10 @@ export function ImportarSancionesHistoricas() {
                 </tbody>
               </table>
             </div>
+            {nextCursor && <Button variant="ghost" onClick={async()=>{
+              try{const page=await get<{data:ImportSummary[];nextCursor:string|null}>(`/api/imports/faltas?cursor=${encodeURIComponent(nextCursor)}`);setImports(current=>[...current,...page.data]);setNextCursor(page.nextCursor);}
+              catch(error){toast.error("No se pudieron cargar las importaciones",error instanceof Error?error.message:"Error");}
+            }}>Ver más importaciones</Button>}
           </div>
         </div>
       )}

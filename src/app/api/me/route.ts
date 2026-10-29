@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       apellidos: user.apellidos ?? null,
       nombreCompleto: user.nombreCompleto ?? null,
       mustChangePassword: Boolean(user.mustChangePassword),
+      dataGeneration: user.dataGeneration ?? 0,
     },
     { status: 200 },
   );

@@ -1,0 +1,169 @@
+
+> app-faltas@0.1.0 test:corrections
+> firebase emulators:exec --only "firestore,auth" --project demo-app-faltas --config firebase.rejection.test.json "node --import tsx --test --test-concurrency=1 scripts/corrections.emulator.test.cjs"
+
+i  emulators: Starting emulators: auth, firestore
+i  emulators: Detected demo project ID "demo-app-faltas", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  firestore: Firestore Emulator logging to firestore-debug.log
++  firestore: Firestore Emulator UI websocket is running on 9158.
+i  Running script: node --import tsx --test --test-concurrency=1 scripts/corrections.emulator.test.cjs
+TAP version 13
+# Subtest: F01: administrador departamental sin acceso directo a auditoría
+ok 1 - F01: administrador departamental sin acceso directo a auditoría
+  ---
+  duration_ms: 866.3484
+  type: 'test'
+  ...
+# Subtest: F02: token revocado sin acceso por API ni por Firestore
+ok 2 - F02: token revocado sin acceso por API ni por Firestore
+  ---
+  duration_ms: 1221.6271
+  type: 'test'
+  ...
+# Subtest: F02: asignación ambigua sin acceso por ninguno de los canales
+ok 3 - F02: asignación ambigua sin acceso por ninguno de los canales
+  ---
+  duration_ms: 92.0114
+  type: 'test'
+  ...
+# Subtest: F03: doce altas simultáneas conservan doce unidades
+ok 4 - F03: doce altas simultáneas conservan doce unidades
+  ---
+  duration_ms: 7472.4004
+  type: 'test'
+  ...
+# Subtest: F04: fila nula rechaza todo el cuerpo sin escrituras
+ok 5 - F04: fila nula rechaza todo el cuerpo sin escrituras
+  ---
+  duration_ms: 88.3187
+  type: 'test'
+  ...
+# Subtest: F08: cancelación extraordinaria localizable en su filtro
+ok 6 - F08: cancelación extraordinaria localizable en su filtro
+  ---
+  duration_ms: 556.9868
+  type: 'test'
+  ...
+# Subtest: F09: auditoría aplica vencimiento efectivo aun con procesador retrasado
+ok 7 - F09: auditoría aplica vencimiento efectivo aun con procesador retrasado
+  ---
+  duration_ms: 95.439
+  type: 'test'
+  ...
+# Subtest: F10: reporte agrupa una unidad renombrada por su identidad
+ok 8 - F10: reporte agrupa una unidad renombrada por su identidad
+  ---
+  duration_ms: 183.409
+  type: 'test'
+  ...
+# Subtest: F11: mes institucional conserva octubre cuando UTC ya cambió de mes
+ok 9 - F11: mes institucional conserva octubre cuando UTC ya cambió de mes
+  ---
+  duration_ms: 144.3324
+  type: 'test'
+  ...
+# Subtest: controles: token ausente/inválido denegado en todas las operaciones API ordinarias
+ok 10 - controles: token ausente/inválido denegado en todas las operaciones API ordinarias
+  ---
+  duration_ms: 134.3876
+  type: 'test'
+  ...
+# Subtest: controles: solo lectura, unidad ajena, cuenta bloqueada y primer cambio
+ok 11 - controles: solo lectura, unidad ajena, cuenta bloqueada y primer cambio
+  ---
+  duration_ms: 128.8766
+  type: 'test'
+  ...
+# Subtest: A09: renovar sesión tras cambiar contraseña vía Admin SDK
+ok 12 - A09: renovar sesión tras cambiar contraseña vía Admin SDK
+  ---
+  duration_ms: 1209.6224
+  type: 'test'
+  ...
+# POST /api/imports/faltas/audit-partial-history/confirm failed Error: ROW_REVALIDATION_FAILED:2:[
+#   {
+#     "origin": "string",
+#     "code": "too_small",
+#     "minimum": 1,
+#     "inclusive": true,
+#     "path": [
+#       "memorandum"
+#     ],
+#     "message": "Too small: expected string to have >=1 characters"
+#   },
+#   {
+#     "code": "custom",
+#     "path": [
+#       "memorandum"
+#     ],
+#     "message": "Formato esperado: Acta-001/2026"
+#   }
+# ]
+#     at Object.POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\imports\\faltas\\[id]\\confirm\\route.ts:231:15)
+#     at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\scripts\\corrections.emulator.test.cjs:208:15)
+#     at async Test.run (node:internal/test_runner/test:1054:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+# Subtest: F12: reintento histórico conserva el total acumulado
+ok 13 - F12: reintento histórico conserva el total acumulado
+  ---
+  duration_ms: 599.8657
+  type: 'test'
+  ...
+# Subtest: F03: reintento de alta es único y la asignación antigua no determina baja de unidad
+ok 14 - F03: reintento de alta es único y la asignación antigua no determina baja de unidad
+  ---
+  duration_ms: 346.3014
+  type: 'test'
+  ...
+# Subtest: F04: importación de 151 filas se reanuda con totales acumulados
+ok 15 - F04: importación de 151 filas se reanuda con totales acumulados
+  ---
+  duration_ms: 18876.1516
+  type: 'test'
+  ...
+# Subtest: F07/F11: CSV neutraliza fórmulas y conserva fechas civiles
+ok 16 - F07/F11: CSV neutraliza fórmulas y conserva fechas civiles
+  ---
+  duration_ms: 0.7998
+  type: 'test'
+  ...
+# Subtest: F14: búsqueda indexada y cursores preservan fragmentos y orden indistinto
+ok 17 - F14: búsqueda indexada y cursores preservan fragmentos y orden indistinto
+  ---
+  duration_ms: 3189.5715
+  type: 'test'
+  ...
+# Subtest: F09: procesador automático vence y notifica una sola vez
+ok 18 - F09: procesador automático vence y notifica una sola vez
+  ---
+  duration_ms: 278.4347
+  type: 'test'
+  ...
+# Subtest: F14: estadísticas reutilizadas se invalidan al editar una unidad
+ok 19 - F14: estadísticas reutilizadas se invalidan al editar una unidad
+  ---
+  duration_ms: 231.9806
+  type: 'test'
+  ...
+# Subtest: F05/F06: depuración incluye huérfanos, pausa escrituras y reanuda sin tocar accesos
+ok 20 - F05/F06: depuración incluye huérfanos, pausa escrituras y reanuda sin tocar accesos
+  ---
+  duration_ms: 5046.2493
+  type: 'test'
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 41591.8656
++  Script exited successfully (code 0)
+i  emulators: Shutting down emulators.
+i  firestore: Stopping Firestore Emulator
+!  Firestore Emulator has exited upon receiving signal: SIGINT
+i  auth: Stopping Authentication Emulator
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator

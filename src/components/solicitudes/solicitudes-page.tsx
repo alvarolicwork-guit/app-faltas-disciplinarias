@@ -11,13 +11,13 @@ import { Card, EmptyState, Skeleton, Badge } from "@/components/ui/primitives";
 import { ApiError, useApi } from "@/hooks/use-api";
 import { useDataCache } from "@/hooks/use-data-cache";
 import { useToast } from "@/hooks/use-toast";
-import { pendingRequest, requestDeadline } from "@/lib/domain/sanction-policy";
-import { boliviaDateTime } from "@/lib/domain/audit-report";
+import { pendingRequest, requestDeadline, REQUEST_STATES, type RequestState } from "@/lib/domain/sanction-policy";
+import { boliviaDateTime, auditStateLabel } from "@/lib/domain/audit-report";
 
 type Solicitud = {
   id: string;
   faltaId: string;
-  estado: "pendiente" | "aprobada" | "rechazada";
+  estado: RequestState;
   motivo: string;
   motivoResolucion?: string;
   solicitanteUnidadNombre?: string;
@@ -53,7 +53,7 @@ export function SolicitudesPage({ selectedRequestId, onFindSanction }: { selecte
   const [result, setResult] = useState<{key:string; rows:Solicitud[]; error?:string} | null>(null);
   const loadVersion = useRef(0);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"pendiente" | "aprobada" | "rechazada">("pendiente");
+  const [filter, setFilter] = useState<RequestState>("pendiente");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [resolveTarget, setResolveTarget] = useState<Solicitud | null>(null);
@@ -204,14 +204,14 @@ export function SolicitudesPage({ selectedRequestId, onFindSanction }: { selecte
             Actualizar
           </Button>
           <div className="flex gap-1 bg-[var(--navy-100)] p-1 rounded-xl">
-            {(["pendiente", "aprobada", "rechazada"] as const).map((status) => (
+            {REQUEST_STATES.map((status) => (
               <button
                 key={status}
                 type="button"
                 onClick={() => setFilter(status)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${filter === status ? "bg-white shadow-sm text-[var(--navy-900)]" : "text-[var(--navy-500)]"}`}
               >
-                {{pendiente:"Pendientes",aprobada:"Aprobadas",rechazada:"Rechazadas"}[status]}
+                {{pendiente:"Pendientes",aprobada:"Aprobadas",rechazada:"Rechazadas",cerrada_extraordinaria:"Extraordinarias"}[status]}
               </button>
             ))}
           </div>
@@ -243,7 +243,7 @@ export function SolicitudesPage({ selectedRequestId, onFindSanction }: { selecte
                     <td className="px-4 py-3 text-[var(--navy-700)]">{row.solicitanteUnidadNombre ?? "-"}</td>
                     <td className="px-4 py-3 text-[var(--navy-700)] max-w-[350px]"><p>{row.motivo}</p><p className="mt-1 text-xs">Solicitante: {row.solicitadaPor?.email || "No registrado"}</p><details className="mt-2"><summary>Ver información de la solicitud</summary><p>Tipo: {row.tipoSolicitud === "representacion" ? "Representación de la sanción" : row.tipoSolicitud === "error_insercion" ? "Error de inserción" : "No registrado"}</p>{row.memorandumRepresentacion && <p>Documento de representación: {row.memorandumRepresentacion}</p>}{row.comentario && row.comentario !== row.motivo && <p>Comentario: {row.comentario}</p>}{row.motivoResolucion && <p>Motivo de resolución: {row.motivoResolucion}</p>}{row.resolvedBy && <p>Resuelta por: {row.resolvedBy.email || (row.resolvedBy.uid === "sistema" ? "Sistema — vencimiento del plazo" : row.resolvedBy.uid)}</p>}</details></td>
                     <td className="px-4 py-3">
-                      <Badge variant={row.estado === "pendiente" ? "warning" : row.estado === "aprobada" ? "success" : "default"}>{row.estado === "rechazada" ? row.causaCierre === "vencimiento" ? "Rechazada por vencimiento" : row.causaCierre === "decision" ? "Rechazada por el administrador" : "Rechazada" : row.estado}</Badge>
+                      <Badge variant={row.estado === "pendiente" ? "warning" : row.estado === "aprobada" ? "success" : "default"}>{row.estado === "rechazada" ? row.causaCierre === "vencimiento" ? "Rechazada por vencimiento" : row.causaCierre === "decision" ? "Rechazada por el administrador" : "Rechazada" : auditStateLabel(row.estado)}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       {row.estado === "pendiente" ? <>

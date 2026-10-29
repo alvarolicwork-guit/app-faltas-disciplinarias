@@ -1,0 +1,21 @@
+{
+  "findings": 16,
+  "priorities": [
+    {
+      "count": 6,
+      "priority": "P1"
+    },
+    {
+      "count": 9,
+      "priority": "P2"
+    },
+    {
+      "count": 1,
+      "priority": "P3"
+    }
+  ],
+  "brokenLinks": [],
+  "missingSources": [],
+  "trailingWhitespace": [],
+  "validJsonFiles": 8
+}

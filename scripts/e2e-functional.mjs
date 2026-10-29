@@ -1,3 +1,4 @@
+// Functional acceptance: isolated demo only, including touch navigation.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,10 +29,12 @@ await seedChainRow('e2e-parallel','e2e-a','art9',1,'2026-01-01');await seedChain
 await seedChainRow('e2e-parallel','e2e-x','art9',2,'2026-02-01');await seedChainRow('e2e-parallel','e2e-y','art10',1,'2026-04-01','e2e-x');
 await db.collection('personal').doc('e2e-expired').set({ci:'12345001',grado:'Cabo',nombreCompleto:'Cabo Cadena Vencida',estado:'activo'});
 await seedChainRow('e2e-expired','e2e-old-root','art10',5,'2025-10-01');await seedChainRow('e2e-expired','e2e-old-child','art11',1,'2026-09-01','e2e-old-root');
-const runtime=process.env.PLAYWRIGHT_MODULES ?? 'C:/Users/Alvaro/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules';
-const require=createRequire(path.resolve(runtime,'package.json'));
+const {personalIndex}=await import('../src/lib/domain/personal-index.ts');
+for(const doc of (await db.collection('personal').get()).docs)await doc.ref.update(personalIndex(doc.data()));
+await db.collection('access_control').doc('search_index').set({version:1});
+const require=createRequire(import.meta.url);
 const {chromium}=require('playwright');
-const output='docs/validacion-reincidencia-2026-10-27';fs.mkdirSync(output,{recursive:true});
+const output='.local-demo/e2e';fs.mkdirSync(output,{recursive:true});
 const logs=fs.openSync(path.join(output,'next-e2e.log'),'w');
 const server=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--webpack','-p','3137'],{windowsHide:true,stdio:['ignore',logs,logs],env:{...process.env,NEXT_PUBLIC_FIREBASE_PROJECT_ID:'demo-app-faltas',NEXT_PUBLIC_FIREBASE_API_KEY:'fake-api-key',NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:'demo-app-faltas.firebaseapp.com',NEXT_PUBLIC_FIREBASE_APP_ID:'demo-app-id',NEXT_PUBLIC_FIREBASE_USE_EMULATORS:'true',BSFP_INTEGRATION_ENABLED:'false'}});
 let browser;
@@ -39,7 +42,7 @@ try {
   let ready=false;
   for(let i=0;i<100;i++){try{if((await fetch('http://localhost:3137')).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
   assert.ok(ready,'Local demo app did not start');
-  browser=await chromium.launch({headless:true,channel:'chrome'});
+  browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL??(process.platform==='win32'?'chrome':undefined)});
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   page.setDefaultTimeout(30_000);
   const failures=[];page.on('pageerror',e=>{failures.push(e.message);console.log('Browser error:',e.message);});
@@ -51,8 +54,8 @@ try {
   await page.getByPlaceholder('Buscar por CI, nombre o apellido').fill('12345678');
   await page.getByRole('button',{name:'Buscar',exact:true}).click();
   await page.getByRole('button',{name:/Cabo Persona Ficticia/}).click();
-  await page.getByLabel('Artículo de la conducta',{exact:true}).selectOption('art9');
-  await page.getByLabel('Inciso de la conducta',{exact:true}).selectOption({index:1});
+  await page.getByLabel('Artículo de la falta cometida',{exact:true}).selectOption('art9');
+  await page.getByLabel('Inciso de la falta cometida',{exact:true}).selectOption({index:1});
   await page.getByLabel(/Memorándum|Acta/).fill('0012026');
   await page.getByLabel(/Motivo/).fill('Registro ficticio para validación de interfaz');
   await page.getByRole('button',{name:/Registrar Sanción/i}).click();
@@ -104,10 +107,10 @@ try {
   // Register11/1 for9/2 while the same person already has11/1 for9/1.
   await page.getByRole('button',{name:'Registro de Falta',exact:true}).click();
   await page.getByPlaceholder('Buscar por CI, nombre o apellido').fill('12345000');await page.getByRole('button',{name:'Buscar',exact:true}).click();await page.getByRole('button',{name:/Cabo Conductas Paralelas/}).click();
-  await page.getByLabel('Artículo de la conducta',{exact:true}).selectOption('art9');
-  await page.getByLabel('Inciso de la conducta',{exact:true}).selectOption(catalog[0].incisos[0]);
-  await page.getByLabel('Inciso de la conducta',{exact:true}).selectOption(catalog[0].incisos[1]);
-  await page.getByText('Documento ficticio e2e-y',{exact:false}).waitFor();
+  await page.getByLabel('Artículo de la falta cometida',{exact:true}).selectOption('art9');
+  await page.getByLabel('Inciso de la falta cometida',{exact:true}).selectOption(catalog[0].incisos[0]);
+  await page.getByLabel('Inciso de la falta cometida',{exact:true}).selectOption(catalog[0].incisos[1]);
+  await page.getByText('Documento ficticio e2e-y',{exact:false}).first().waitFor();
   await page.getByLabel(/Memorándum|Acta/).fill('9012026');await page.getByLabel(/Motivo/).fill('Reiteración ficticia de conducta9 inciso2');
   await page.getByRole('button',{name:/Registrar Sanción/i}).click();await page.getByRole('checkbox',{name:/Confirmo mi intención/}).check();
   await page.screenshot({path:path.join(output,'reincidencia-conducta-9-2.png'),fullPage:true});
@@ -116,14 +119,56 @@ try {
   const justRegistered=parallel.find(r=>r.memorandum==='Memorándum-901/2026');assert.ok(justRegistered);assert.equal(justRegistered.conductaOrigen.incisoNumero,2);assert.equal(justRegistered.cadenaId,'e2e-x');assert.equal(justRegistered.reincidenciaOrigen.faltaReferenciaId,'e2e-y');
   // A new10/5 base is available when its original chain has expired.
   await page.getByPlaceholder('Buscar por CI, nombre o apellido').fill('12345001');await page.getByRole('button',{name:'Buscar',exact:true}).click();await page.getByRole('button',{name:/Cabo Cadena Vencida/}).click();
-  await page.getByLabel('Artículo de la conducta',{exact:true}).selectOption('art10');await page.getByLabel('Inciso de la conducta',{exact:true}).selectOption(catalog[1].incisos[4]);
+  await page.getByLabel('Artículo de la falta cometida',{exact:true}).selectOption('art10');await page.getByLabel('Inciso de la falta cometida',{exact:true}).selectOption(catalog[1].incisos[4]);
   await page.getByRole('heading',{name:'Nuevo registro tras finalizar el período anterior',exact:true}).waitFor();
   await page.getByLabel(/Memorándum|Acta/).fill('9022026');await page.getByLabel(/Motivo/).fill('Nueva falta ficticia después de vencer la cadena');
   await page.getByRole('button',{name:/Registrar Sanción/i}).click();await page.getByRole('checkbox',{name:/Confirmo mi intención/}).check();
   const restartedResponse=page.waitForResponse(r=>r.url().endsWith('/api/faltas')&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirmar Registro',exact:true}).click();assert.equal((await restartedResponse).status(),201);
   const restart=(await db.collection('faltas').where('personalId','==','e2e-expired').get()).docs.find(d=>d.data().memorandum==='Memorándum-902/2026');assert.ok(restart);assert.equal(restart.data().nivelEfectivo,0);assert.equal(restart.data().raizHistoricaId,restart.id);assert.equal(restart.data().reincidenciaOrigen,null);
+  // Persisted import can be reopened after a full reload.
+  await superPage.getByRole('button',{name:'Importar Personal',exact:true}).click();
+  await superPage.locator('input[type=file]').setInputFiles({name:'control-ficticio.csv',mimeType:'text/csv',buffer:Buffer.from('ci;grado;nombres;apellidos;sexo\n99887766;Sgto.;Prueba;Carga Uno;Masculino\n99887767;Sgto.;Prueba;Carga Dos;Femenino\n99887766;Sgto.;Prueba;Duplicada;Masculino')});
+  const importResponse=superPage.waitForResponse(r=>r.url().endsWith('/api/imports/personal')&&r.request().method()==='POST');
+  await superPage.getByRole('button',{name:'Importar Personal',exact:true}).last().click();
+  const imported=await (await importResponse).json();assert.equal(imported.createdRows,2);assert.equal(imported.errorRows,1);
+  await superPage.getByRole('heading',{name:'Resultado de Importación',exact:true}).waitFor();
+  await superPage.reload();await superPage.getByRole('button',{name:'Importar Personal',exact:true}).click();
+  await superPage.getByRole('button',{name:'Ver resultado',exact:true}).first().click();
+  await superPage.getByRole('heading',{name:'Resultado de Importación',exact:true}).waitFor();
+  // Closed extraordinary requests remain visible to the authorized unit.
+  const {createCancellationRequest,cancelDirectly}=await import('../src/lib/server/cancellations.ts');
+  const {prepareConfirmation}=await import('../src/lib/server/operations.ts');
+  const unitActor={uid:'e2e-registrador',email:'registrador-e2e@example.test',role:'admin_unidad',unidadId:'u-e2e',token:{}};
+  const superActor={uid:'e2e-super',email:'e2e-super@example.test',role:'super_admin',token:{}};
+  await createCancellationRequest(unitActor,{faltaId:restart.id,motivo:'Solicitud ficticia para comprobar cierre extraordinario'});
+  const cancelPayload={id:restart.id,motivo:'Cancelación extraordinaria ficticia para comprobar seguimiento'};
+  await cancelDirectly(superActor,cancelPayload,await prepareConfirmation(superActor,'cancelar_sancion',cancelPayload));
+  await superPage.getByRole('button',{name:'Cancelaciones',exact:true}).click();
+  await superPage.getByRole('button',{name:'Extraordinarias',exact:true}).click();
+  await superPage.getByText('Cerrada por cancelación extraordinaria',{exact:true}).waitFor();
+  await superPage.screenshot({path:path.join(output,'solicitud-extraordinaria.png'),fullPage:true});
+  const {devices}=require('playwright');
+  const phoneContext=await browser.newContext({...devices['Pixel 7']});
+  const phone=await phoneContext.newPage();phone.on('pageerror',e=>failures.push(e.message));
+  await phone.goto('http://localhost:3137');
+  await phone.getByLabel('Correo electrónico').fill('e2e-super@example.test');
+  await phone.getByLabel('Contraseña',{exact:true}).fill('SoloPruebas123');
+  await phone.getByRole('button',{name:'Iniciar sesión',exact:true}).tap();
+  await phone.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+  await phone.getByRole('button',{name:'Menú',exact:true}).tap();
+  const visibleSidebar=phone.locator('aside').filter({visible:true});await visibleSidebar.waitFor();
+  assert.equal(await visibleSidebar.evaluate(el=>getComputedStyle(el).display),'flex');
+  await visibleSidebar.screenshot({path:path.join(output,'menu-pixel7.png')});
+  await visibleSidebar.getByRole('button',{name:'Reportes',exact:true}).tap();
+  await phone.getByRole('heading',{name:'Reportes Estadísticos',exact:true}).waitFor();
+  assert.equal(await phone.locator('aside').filter({visible:true}).count(),0);
+  await phone.getByRole('button',{name:'Generar',exact:true}).tap();
+  await phone.getByText('Sanciones por conducta original',{exact:true}).waitFor();
+  assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+  await phone.screenshot({path:path.join(output,'reporte-pixel7.png'),fullPage:true});
+  await phoneContext.close();
   assert.deepEqual(failures,[]);
-  fs.writeFileSync(path.join(output,'e2e.json'),JSON.stringify({project:'demo-app-faltas',passed:true,checkedAt:new Date().toISOString(),checks:['login','global-roster-selection','explicit-confirmation','persisted-unit-and-author','mobile-history','author-request','department-resolution','unit-notification','separate-superadmin-reports','parallel-conducts-independent-escalation','expired-article10-new-base','rapid-conduct-selection'],browserErrors:failures},null,2));
+  fs.writeFileSync(path.join(output,'e2e.json'),JSON.stringify({project:'demo-app-faltas',passed:true,checkedAt:new Date().toISOString(),checks:['login','global-roster-selection-indexed','explicit-confirmation','persisted-unit-and-author','mobile-history','author-request','department-resolution','unit-notification','separate-superadmin-reports','parallel-conducts-independent-escalation','expired-article10-new-base','rapid-conduct-selection','personal-import-and-reopen','extraordinary-request-visible','pixel7-touch-menu','mobile-report'],browserErrors:failures},null,2));
   console.log('E2E: login, padrón global, confirmación, registro por unidad y móvil correctos');
 } catch(error) {
   if(browser) for(const [index,page] of browser.contexts().flatMap(c=>c.pages()).entries()) { await page.screenshot({path:path.join(output,`failure-${index}.png`),fullPage:true});fs.writeFileSync(path.join(output,`failure-${index}.txt`),await page.locator('body').innerText()); }

@@ -6,6 +6,8 @@ import { getRequestUser } from "@/lib/auth/request-user";
 import { USER_ROLES_UNIT_SCOPE } from "@/lib/domain/constants";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { pendingRequest, requestDeadline } from "@/lib/domain/sanction-policy";
+import { boliviaDate, civilMonth } from "@/lib/domain/institutional-date";
+import { statsCache } from "@/lib/server/stats-cache";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +20,8 @@ export async function GET(request: NextRequest) {
     const userIsUnitScoped = USER_ROLES_UNIT_SCOPE.has(actor.role);
     const unidadIdParam = request.nextUrl.searchParams.get("unidadId")?.trim();
     const scopedUnidadId = userIsUnitScoped ? actor.unidadId : unidadIdParam;
+    const cache=await statsCache(db,{kind:"dashboard",role:actor.role,unit:scopedUnidadId??"",today:boliviaDate()});
+    if(cache.hit)return NextResponse.json(cache.hit);
 
     // Build faltas query
     let faltasQuery = db.collection("faltas").where("estado", "==", "registrada");
@@ -32,12 +36,11 @@ export async function GET(request: NextRequest) {
     const totalFaltas = allFaltas.length;
 
     // This month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const month = civilMonth(boliviaDate());
     const faltasMes = allFaltas.filter((f) => {
       const ts = f.fechaSancion;
       if (!ts?.toDate) return false;
-      return ts.toDate() >= startOfMonth;
+      return civilMonth(ts.toDate().toISOString()) === month;
     }).length;
 
     let reincidenciasQuery = db.collection("reincidencias_bloqueadas").where("estado", "==", "bloqueada");
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest) {
       unidadSancionNombre: f.unidadSancionNombre ?? f.unidadNombre ?? "",
     }));
 
-    return NextResponse.json({
+    const data={
       ...pendingSummary,
       totalFaltas,
       personasSancionadas:new Set(allFaltas.map(f=>f.personalId)).size,
@@ -101,7 +104,9 @@ export async function GET(request: NextRequest) {
       porArticulo,
       porConducta:statisticsByConduct(allFaltas),
       recientes,
-    });
+    };
+    await cache.save(data);
+    return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: "Error al obtener dashboard" }, { status: 500 });
   }

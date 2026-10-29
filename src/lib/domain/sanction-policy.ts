@@ -4,6 +4,8 @@ import { dateOnly, newChainMetadata, resolveChain, sameConduct, type SanctionRow
 export const DAY_MS = 86_400_000;
 export const CANCELLATION_DAYS = 7;
 export const REQUEST_DAYS = 5;
+export const REQUEST_STATES = ["pendiente", "aprobada", "rechazada", "cerrada_extraordinaria"] as const;
+export type RequestState = typeof REQUEST_STATES[number];
 
 export function millis(value: unknown): number | null {
   if (value && typeof value === "object" && "toMillis" in value) {
@@ -28,6 +30,13 @@ export function requestDeadline(row: Record<string, unknown>): number | null {
 export function pendingRequest(row: Record<string, unknown>, now: number): boolean {
   // Legacy requests without a reliable date stay blocked for explicit review.
   return row.estado === "pendiente" && (requestDeadline(row) === null || now < requestDeadline(row)!);
+}
+
+/** Read projection: a delayed worker cannot make an expired request look pending. */
+export function effectiveRequest(row: Record<string, unknown>, now: number = Date.now()): Record<string, unknown> {
+  const deadline = requestDeadline(row);
+  if (row.estado !== "pendiente" || deadline === null || now < deadline) return row;
+  return { ...row, estado: "rechazada", causaCierre: "vencimiento", motivoResolucion: "Plazo de resolución vencido", resolvedAt: new Date(deadline).toISOString(), resolvedBy: { uid: "sistema", role: "sistema" }, dispensaEspera: false };
 }
 
 export function authorUid(row: Record<string, unknown>): string {
@@ -192,4 +201,3 @@ export function lowerDependentChain(rows: ChainRow[], targetId: string): ChainRo
   }
   return output;
 }
-

@@ -1,0 +1,340 @@
+
+> app-faltas@0.1.0 test:emulator
+> firebase emulators:exec --only "firestore,auth" --project demo-app-faltas --config firebase.test.json "node --import tsx --test --test-concurrency=1 src/lib/server/workflow.emulator.test.ts src/lib/server/recurrence.emulator.test.ts"
+
+i  emulators: Starting emulators: auth, firestore
+i  emulators: Detected demo project ID "demo-app-faltas", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  firestore: Firestore Emulator logging to firestore-debug.log
++  firestore: Firestore Emulator UI websocket is running on 9150.
+i  Running script: node --import tsx --test --test-concurrency=1 src/lib/server/workflow.emulator.test.ts src/lib/server/recurrence.emulator.test.ts
+TAP version 13
+# Subtest: A04-A09: dos conductas9/X escalan independientemente hasta11/1
+ok 1 - A04-A09: dos conductas9/X escalan independientemente hasta11/1
+  ---
+  duration_ms: 1437.0214
+  type: 'test'
+  ...
+# Subtest: A16-A17-A46: vence la raíz9/10, permite nueva base y prohíbe continuar cadena antigua
+ok 2 - A16-A17-A46: vence la raíz9/10, permite nueva base y prohíbe continuar cadena antigua
+  ---
+  duration_ms: 1200.7594
+  type: 'test'
+  ...
+# POST /api/faltas failed {
+#   error: ChainError: La fecha de sanción no puede ser futura
+#       at validateSanctionDate (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\domain\\recurrence-chain.ts:42:26)
+#       at evaluateInTransaction (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:8:3)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:189:32)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.emulator.test.ts:60:40)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     code: 'FECHA_FUTURA'
+#   },
+#   message: 'La fecha de sanción no puede ser futura'
+# }
+# POST /api/faltas failed {
+#   error: ChainError: No se encontró el antecedente
+#       at resolveChain (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\domain\\recurrence-chain.ts:77:23)
+#       at conductForInput (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:36:40)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:188:23)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.emulator.test.ts:61:44)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     code: 'CADENA_REQUIERE_REVISION'
+#   },
+#   message: 'No se encontró el antecedente'
+# }
+# Subtest: A08-A18: no admite salto9→11, fecha futura o origen de otra persona
+ok 3 - A08-A18: no admite salto9→11, fecha futura o origen de otra persona
+  ---
+  duration_ms: 650.6588
+  type: 'test'
+  ...
+# POST /api/faltas failed {
+#   error: OperationError: Los antecedentes cambiaron. Revise y confirme la evaluación actualizada
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:191:85)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.emulator.test.ts:68:18)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'Los antecedentes cambiaron. Revise y confirme la evaluación actualizada'
+# }
+# Subtest: A25: confirmación con decisión desactualizada obliga a reevaluar
+ok 4 - A25: confirmación con decisión desactualizada obliga a reevaluar
+  ---
+  duration_ms: 386.21
+  type: 'test'
+  ...
+# POST /api/faltas failed {
+#   error: OperationError: El antecedente podrá utilizarse desde 4/11/26, 11:05 p. m. (siete días desde su registro)
+#       at assertDecisionAvailable (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:40:86)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:192:7)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async Promise.all (index 0)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.emulator.test.ts:72:17)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'El antecedente podrá utilizarse desde 4/11/26, 11:05 p. m. (siete días desde su registro)'
+# }
+# Subtest: A21-A22-A51: carreras no duplican base y permiten conductas distintas
+ok 5 - A21-A22-A51: carreras no duplican base y permiten conductas distintas
+  ---
+  duration_ms: 5999.3701
+  type: 'test'
+  ...
+# Subtest: A11-A12-A13-A49: bloqueo de siete/cinco días; cadena vencida no bloquea nueva base
+ok 6 - A11-A12-A13-A49: bloqueo de siete/cinco días; cadena vencida no bloquea nueva base
+  ---
+  duration_ms: 586.1091
+  type: 'test'
+  ...
+# POST /api/imports/faltas/chains-import/confirm failed OperationError: Los antecedentes cambiaron o la tipificación histórica no corresponde a la cadena actual
+#     at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\imports\\faltas\\[id]\\confirm\\route.ts:297:106)
+#     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#     at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#     at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#     at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\imports\\faltas\\[id]\\confirm\\route.ts:276:24)
+#     at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.emulator.test.ts:96:17)
+#     at async Test.run (node:internal/test_runner/test:1054:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#   status: 409
+# }
+# Subtest: A28-A29: importación revalida nuevas bases y recupera lotes sin resucitar anuladas
+ok 7 - A28-A29: importación revalida nuevas bases y recupera lotes sin resucitar anuladas
+  ---
+  duration_ms: 598.5187
+  type: 'test'
+  ...
+# Subtest: A36-A43: migración aditiva ensayada, idempotencia y restauración exacta en demo
+ok 8 - A36-A43: migración aditiva ensayada, idempotencia y restauración exacta en demo
+  ---
+  duration_ms: 156.5927
+  type: 'test'
+  ...
+# Subtest: A37: inventario no omite una escalada huérfana sin descendientes
+ok 9 - A37: inventario no omite una escalada huérfana sin descendientes
+  ---
+  duration_ms: 165.2026
+  type: 'test'
+  ...
+# Subtest: A08-A10: antecedentes muestran solo último escalón disponible y el plazo completo
+ok 10 - A08-A10: antecedentes muestran solo último escalón disponible y el plazo completo
+  ---
+  duration_ms: 157.2637
+  type: 'test'
+  ...
+# Subtest: A50: origen histórico conserva el año de su raíz, no el de importación
+ok 11 - A50: origen histórico conserva el año de su raíz, no el de importación
+  ---
+  duration_ms: 0.1718
+  type: 'test'
+  ...
+# POST /api/faltas failed {
+#   error: ChainError: El antecedente está sin efecto
+#       at resolveChain (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\domain\\recurrence-chain.ts:118:45)
+#       at conductForInput (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:36:40)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:188:23)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async Promise.allSettled (index 0)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.emulator.test.ts:136:18)
+#       at async Test.run (node:internal/test_runner/test:1054:7) {
+#     code: 'CADENA_REQUIERE_REVISION'
+#   },
+#   message: 'El antecedente está sin efecto'
+# }
+# Subtest: A23: cancelación extraordinaria concurrente con reincidencia nunca deja un padre sin efecto
+ok 12 - A23: cancelación extraordinaria concurrente con reincidencia nunca deja un padre sin efecto
+  ---
+  duration_ms: 247.7622
+  type: 'test'
+  ...
+# Subtest: A39-A40: el intento bloqueado no es una sanción y la auditoría conserva original/actual
+ok 13 - A39-A40: el intento bloqueado no es una sanción y la auditoría conserva original/actual
+  ---
+  duration_ms: 948.2212
+  type: 'test'
+  ...
+# Subtest: A50: confirmar una importación histórica evalúa el plazo en la fecha del registro importado
+ok 14 - A50: confirmar una importación histórica evalúa el plazo en la fecha del registro importado
+  ---
+  duration_ms: 392.6785
+  type: 'test'
+  ...
+# Subtest: API: padrón global, unidad automática, confirmación y reintento único
+ok 15 - API: padrón global, unidad automática, confirmación y reintento único
+  ---
+  duration_ms: 797.545
+  type: 'test'
+  ...
+# Subtest: reglas Firestore: toda lectura directa denegada; datos por API
+ok 16 - reglas Firestore: toda lectura directa denegada; datos por API
+  ---
+  duration_ms: 180.2326
+  type: 'test'
+  ...
+# POST /api/faltas failed {
+#   error: OperationError: El antecedente podrá utilizarse desde 3/11/26, 11:05 p. m. (siete días desde su registro)
+#       at assertDecisionAvailable (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:40:86)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:192:7)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\workflow.emulator.test.ts:77:15)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'El antecedente podrá utilizarse desde 3/11/26, 11:05 p. m. (siete días desde su registro)'
+# }
+# POST /api/faltas failed {
+#   error: OperationError: El antecedente podrá utilizarse desde 3/11/26, 11:05 p. m. (siete días desde su registro)
+#       at assertDecisionAvailable (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:40:86)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:192:7)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\workflow.emulator.test.ts:78:22)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'El antecedente podrá utilizarse desde 3/11/26, 11:05 p. m. (siete días desde su registro)'
+# }
+# POST /api/faltas failed {
+#   error: OperationError: El antecedente tiene una solicitud de cancelación pendiente
+#       at assertDecisionAvailable (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\recurrence.ts:40:86)
+#       at <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:192:7)
+#       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#       at async Transaction.runTransactionOnce (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:717:22)
+#       at async <anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\node_modules\\@google-cloud\\firestore\\dev\\src\\transaction.ts:676:20)
+#       at async POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\faltas\\route.ts:133:20)
+#       at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\lib\\server\\workflow.emulator.test.ts:81:17)
+#       at async Test.run (node:internal/test_runner/test:1054:7)
+#       at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+#     status: 409
+#   },
+#   message: 'El antecedente tiene una solicitud de cancelación pendiente'
+# }
+# Subtest: API: reincidencia espera siete días y solicitudes; no permite duplicar base
+ok 17 - API: reincidencia espera siete días y solicitudes; no permite duplicar base
+  ---
+  duration_ms: 1042.0671
+  type: 'test'
+  ...
+# Subtest: confirmación alterada y cancelación extraordinaria con impacto obsoleto se rechazan
+ok 18 - confirmación alterada y cancelación extraordinaria con impacto obsoleto se rechazan
+  ---
+  duration_ms: 90.9728
+  type: 'test'
+  ...
+# Subtest: solo autor solicita; aprobación conserva registro y notifica una vez
+ok 19 - solo autor solicita; aprobación conserva registro y notifica una vez
+  ---
+  duration_ms: 571.0934
+  type: 'test'
+  ...
+# Subtest: vencimiento se persiste y no permite aprobación tardía
+ok 20 - vencimiento se persiste y no permite aprobación tardía
+  ---
+  duration_ms: 3663.6837
+  type: 'test'
+  ...
+# Subtest: administrador departamental no cancela ajenas ni propias fuera de plazo
+ok 21 - administrador departamental no cancela ajenas ni propias fuera de plazo
+  ---
+  duration_ms: 202.9319
+  type: 'test'
+  ...
+# Subtest: extraordinaria cancela una y rebaja dependientes atómicamente
+ok 22 - extraordinaria cancela una y rebaja dependientes atómicamente
+  ---
+  duration_ms: 231.1637
+  type: 'test'
+  ...
+# Subtest: concurrencia de administradores no duplica rol activo por unidad
+ok 23 - concurrencia de administradores no duplica rol activo por unidad
+  ---
+  duration_ms: 2950.3165
+  type: 'test'
+  ...
+# Subtest: unidad ausente, cuenta bloqueada y primer cambio bloquean API
+ok 24 - unidad ausente, cuenta bloqueada y primer cambio bloquean API
+  ---
+  duration_ms: 57.8308
+  type: 'test'
+  ...
+# Subtest: operador y visor no registran; solo superadministrador genera auditoría
+ok 25 - operador y visor no registran; solo superadministrador genera auditoría
+  ---
+  duration_ms: 222.5175
+  type: 'test'
+  ...
+# Subtest: notificaciones de otra unidad no se listan ni se pueden marcar
+ok 26 - notificaciones de otra unidad no se listan ni se pueden marcar
+  ---
+  duration_ms: 212.6269
+  type: 'test'
+  ...
+# Subtest: cancelación departamental propia dentro de plazo conserva autor y motivo
+ok 27 - cancelación departamental propia dentro de plazo conserva autor y motivo
+  ---
+  duration_ms: 186.0987
+  type: 'test'
+  ...
+# Subtest: relevo pendiente reserva unidad, bloquea saliente y permite recuperación
+ok 28 - relevo pendiente reserva unidad, bloquea saliente y permite recuperación
+  ---
+  duration_ms: 449.3259
+  type: 'test'
+  ...
+# Subtest: toda la cadena debe estar vigente y sin solicitudes pendientes
+ok 29 - toda la cadena debe estar vigente y sin solicitudes pendientes
+  ---
+  duration_ms: 140.1915
+  type: 'test'
+  ...
+# Subtest: integración no omite sesión ni confirmación y rechaza contrato antiguo
+ok 30 - integración no omite sesión ni confirmación y rechaza contrato antiguo
+  ---
+  duration_ms: 416.5288
+  type: 'test'
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 25987.8212
++  Script exited successfully (code 0)
+i  emulators: Shutting down emulators.
+i  firestore: Stopping Firestore Emulator
+!  Firestore Emulator has exited upon receiving signal: SIGINT
+i  auth: Stopping Authentication Emulator
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator

@@ -1,0 +1,24 @@
+{
+  "project": "demo-app-faltas",
+  "passed": true,
+  "checkedAt": "2026-10-29T03:06:52.529Z",
+  "checks": [
+    "login",
+    "global-roster-selection-indexed",
+    "explicit-confirmation",
+    "persisted-unit-and-author",
+    "mobile-history",
+    "author-request",
+    "department-resolution",
+    "unit-notification",
+    "separate-superadmin-reports",
+    "parallel-conducts-independent-escalation",
+    "expired-article10-new-base",
+    "rapid-conduct-selection",
+    "personal-import-and-reopen",
+    "extraordinary-request-visible",
+    "pixel7-touch-menu",
+    "mobile-report"
+  ],
+  "browserErrors": []
+}

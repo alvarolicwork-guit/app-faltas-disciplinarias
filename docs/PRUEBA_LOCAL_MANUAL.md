@@ -1,6 +1,6 @@
 # Prueba local manual de App Faltas
 
-Fecha:27/10/2026. Secuencia acordada: **prueba local → publicación tras conformidad → comprobación del despliegue → depuración de registros identificados como pruebas**. No se ha publicado ni autorizado una limpieza inmediata.
+Actualización28/10/2026: el usuario autorizó ejecutar el [plan de correcciones](PLAN_CORRECCIONES_AUDITORIA_2026-10-28.md), incluida la depuración de los registros actuales de prueba después de corregir, probar y comprobar la publicación. Estado real de cada etapa en [ejecución](EJECUCION_CORRECCIONES_2026-10-28.md). Las instrucciones de acceso siguientes corresponden únicamente a emuladores; las cuentas demo no son cuentas de producción.
 
 ## Acceso
 

@@ -1,0 +1,24 @@
+{
+  "projectId": "control-disciplinario-comando",
+  "readOnly": true,
+  "checkedAt": "2026-10-28T16:32:59.852Z",
+  "counts": {
+    "personal": 1483,
+    "faltas": 179,
+    "users": 2,
+    "solicitudes": 1
+  },
+  "issues": {
+    "duplicateCi": 0,
+    "unitProfilesMissingUnit": 0,
+    "unitsWithMultipleActiveRegistrars": 0,
+    "orphanPersonalReferences": 0,
+    "missingAuthor": 0,
+    "missingRegistrationDate": 0,
+    "invalidChains": 5,
+    "legacyPendingRequests": 0,
+    "pendingRequestsWithoutReliableDeadline": 0
+  },
+  "identityDigest": "21bb03b632a2195e7ff31e50ceac3eed777b01b61a1fa3a9140e96b5793e43a0",
+  "historyDigest": "4c7af90e0a1fba3608aedef3eb442745f638e11bdfe9af84cf90d2af0df41970"
+}

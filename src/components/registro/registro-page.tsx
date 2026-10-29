@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -55,6 +55,9 @@ export function RegistroPage() {
   const [registroMode, setRegistroMode] = useState<"actual" | "historico">("actual");
   const [personalRows, setPersonalRows] = useState<Personal[]>([]);
   const [personalNextOffset, setPersonalNextOffset] = useState<number | null>(null);
+  const personalCursors=useRef(new Map<number,string>());
+  const personalRequestVersion=useRef(0);
+  const personalSearchApplied=useRef("");
   const [searchText, setSearchText] = useState("");
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -97,17 +100,25 @@ export function RegistroPage() {
   const refreshPersonal = useCallback(async (q = "", _unidad = effectiveUnitId, offset = 0) => {
     void _unidad;
     if (!q.trim()) return;
+    if(offset && personalSearchApplied.current!==q.trim())offset=0;
+    if(!offset)personalSearchApplied.current=q.trim();
+    const requestVersion=++personalRequestVersion.current;
     const params = new URLSearchParams();
     if (q.trim()) params.set("q", q.trim());
     params.set("scope", "catalogo");
     params.set("offset", String(offset));
+    if(!offset)personalCursors.current.clear();
+    if(personalCursors.current.has(offset))params.set("cursor",personalCursors.current.get(offset)!);
     const query = params.toString() ? `?${params}` : "";
     try {
-      const payload = await get<{ data: Personal[]; nextOffset: number | null }>(`/api/personal${query}`);
+      const payload = await get<{ data: Personal[]; nextOffset: number | null; nextCursor?:string|null }>(`/api/personal${query}`);
+      if(requestVersion!==personalRequestVersion.current)return {ok:true as const};
       setPersonalRows(previous => offset ? [...previous, ...payload.data] : payload.data);
-      setPersonalNextOffset(payload.nextOffset);
+      if(payload.nextCursor)personalCursors.current.set(offset+50,payload.nextCursor);
+      setPersonalNextOffset(payload.nextCursor?offset+50:payload.nextOffset);
       return { ok: true as const };
     } catch (error) {
+      if(requestVersion!==personalRequestVersion.current)return {ok:true as const};
       setPersonalRows([]);
       return {
         ok: false as const,

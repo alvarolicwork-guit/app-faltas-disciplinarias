@@ -1,6 +1,6 @@
 export function csvCell(value: unknown): string {
   const text = value == null ? "" : String(value);
-  return `"${(/^[\s]*[=+@-]/.test(text) ? "'" : "") + text.replaceAll('"', '""')}"`;
+  return `"${(/^[\s\u0000-\u001f\u007f]*[=+@-]/.test(text) ? "'" : "") + text.replaceAll('"', '""')}"`;
 }
 export function boliviaMonth(value: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/La_Paz", year: "numeric", month: "2-digit" }).formatToParts(new Date(value));

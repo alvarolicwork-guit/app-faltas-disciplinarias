@@ -49,13 +49,13 @@ test("API: padrón global, unidad automática, confirmación y reintento único"
   assert.equal(forged.status,403);
 });
 
-test("reglas Firestore: propio permitido, ajeno y cuenta bloqueada denegados",async()=>{
+test("reglas Firestore: toda lectura directa denegada; datos por API",async()=>{
   const authToken=await token(unit.email);
   const row={unidadId:"u",estado:"registrada"};
   await db.collection("faltas").doc("rules-own").set(row);
   await db.collection("faltas").doc("rules-other").set({...row,unidadId:"v"});
   const read=(id:string)=>fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/demo-app-faltas/databases/(default)/documents/faltas/${id}`,{headers:{authorization:`Bearer ${authToken}`}});
-  assert.equal((await read("rules-own")).status,200);
+  assert.equal((await read("rules-own")).status,403);
   assert.equal((await read("rules-other")).status,403);
   await db.collection("users").doc(unit.uid).update({status:"bloqueado",isActive:false});
   assert.equal((await read("rules-own")).status,403);

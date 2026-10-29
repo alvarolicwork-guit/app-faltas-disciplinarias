@@ -1,0 +1,123 @@
+i  emulators: Starting emulators: auth, firestore
+i  emulators: Detected demo project ID "demo-app-faltas", emulated services will use a demo configuration and attempts to access non-emulated services for this project will fail.
+i  firestore: Firestore Emulator logging to firestore-debug.log
++  firestore: Firestore Emulator UI websocket is running on 9158.
+i  Running script: node --import tsx --test --test-concurrency=1 docs/auditoria-2026-10-28/reproducciones.test.cjs
+TAP version 13
+# Subtest: A01: admin_dpto lee auditoría directamente aunque la API la prohíbe
+ok 1 - A01: admin_dpto lee auditoría directamente aunque la API la prohíbe
+  ---
+  duration_ms: 1437.5158
+  type: 'test'
+  ...
+# Subtest: A02: revocar token sin cambiar perfil bloquea API pero conserva lectura directa
+ok 2 - A02: revocar token sin cambiar perfil bloquea API pero conserva lectura directa
+  ---
+  duration_ms: 2124.0527
+  type: 'test'
+  ...
+# Subtest: A02b: duplicidad de admin_unidad bloquea API, no Firestore
+ok 3 - A02b: duplicidad de admin_unidad bloquea API, no Firestore
+  ---
+  duration_ms: 83.1383
+  type: 'test'
+  ...
+# Subtest: A03: altas simultáneas de unidad pueden sobrescribirse
+ok 4 - A03: altas simultáneas de unidad pueden sobrescribirse
+  ---
+  duration_ms: 64.5012
+  type: 'test'
+  ...
+# Subtest: A04: fila nula interrumpe importación de padrón después de persistir la anterior
+ok 5 - A04: fila nula interrumpe importación de padrón después de persistir la anterior
+  ---
+  duration_ms: 141.4461
+  type: 'test'
+  ...
+# Subtest: A05: cancelación extraordinaria retira solicitud de los tres filtros disponibles
+ok 6 - A05: cancelación extraordinaria retira solicitud de los tres filtros disponibles
+  ---
+  duration_ms: 352.5544
+  type: 'test'
+  ...
+# Subtest: A06: auditoría conserva estado pendiente vencido sin ejecutar el procesador
+ok 7 - A06: auditoría conserva estado pendiente vencido sin ejecutar el procesador
+  ---
+  duration_ms: 85.349
+  type: 'test'
+  ...
+# Subtest: A07: reporte divide una unidad renombrada en dos grupos
+ok 8 - A07: reporte divide una unidad renombrada en dos grupos
+  ---
+  duration_ms: 58.1196
+  type: 'test'
+  ...
+# Subtest: A08: el contador mensual depende de UTC y cambia de mes antes de medianoche en Bolivia
+ok 9 - A08: el contador mensual depende de UTC y cambia de mes antes de medianoche en Bolivia
+  ---
+  duration_ms: 44.8824
+  type: 'test'
+  ...
+# Subtest: controles: token ausente/inválido denegado en todas las operaciones API ordinarias
+ok 10 - controles: token ausente/inválido denegado en todas las operaciones API ordinarias
+  ---
+  duration_ms: 1107.2487
+  type: 'test'
+  ...
+# Subtest: controles: solo lectura, unidad ajena, cuenta bloqueada y primer cambio
+ok 11 - controles: solo lectura, unidad ajena, cuenta bloqueada y primer cambio
+  ---
+  duration_ms: 163.2676
+  type: 'test'
+  ...
+# Subtest: A09: renovar sesión tras cambiar contraseña vía Admin SDK
+ok 12 - A09: renovar sesión tras cambiar contraseña vía Admin SDK
+  ---
+  duration_ms: 1416.164
+  type: 'test'
+  ...
+# POST /api/imports/faltas/audit-partial-history/confirm failed Error: ROW_REVALIDATION_FAILED:2:[
+#   {
+#     "origin": "string",
+#     "code": "too_small",
+#     "minimum": 1,
+#     "inclusive": true,
+#     "path": [
+#       "memorandum"
+#     ],
+#     "message": "Too small: expected string to have >=1 characters"
+#   },
+#   {
+#     "code": "custom",
+#     "path": [
+#       "memorandum"
+#     ],
+#     "message": "Formato esperado: Acta-001/2026"
+#   }
+# ]
+#     at Object.POST (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\src\\app\\api\\imports\\faltas\\[id]\\confirm\\route.ts:219:15)
+#     at async TestContext.<anonymous> (D:\\APP con IA\\App de registro y Control de Faltas Disciplinarias\\app-faltas\\docs\\auditoria-2026-10-28\\reproducciones.test.cjs:207:15)
+#     at async Test.run (node:internal/test_runner/test:1054:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+# Subtest: A10: reintento de importación histórica no conserva el total acumulado
+ok 13 - A10: reintento de importación histórica no conserva el total acumulado
+  ---
+  duration_ms: 572.7376
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8473.966
++  Script exited successfully (code 0)
+i  emulators: Shutting down emulators.
+i  firestore: Stopping Firestore Emulator
+!  Firestore Emulator has exited upon receiving signal: SIGINT
+i  auth: Stopping Authentication Emulator
+i  hub: Stopping emulator hub
+i  logging: Stopping Logging Emulator

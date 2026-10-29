@@ -1,7 +1,7 @@
 "use client";
 import { parseDelimited, escapeHtml } from "@/lib/domain/delimited";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Icons } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { canBulkImportPersonal } from "@/lib/domain/roles";
 
 type ImportResult = {
   importId?: string;
+  status?: string;
   totalRows: number;
   okRows: number;
   createdRows?: number;
@@ -86,18 +87,31 @@ function parseCsvAuto(text: string): CsvParseResult {
 }
 
 export function ImportPage() {
-  const { post } = useApi();
+  const { post, get } = useApi();
   const { sessionUser } = useAuth();
   const toast = useToast();
   const { getUnitName } = useUnidades();
   const [file, setFile] = useState<File | null>(null);
+  const [operationId,setOperationId]=useState("");
   const [unidadId] = useState("GLOBAL");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [imports, setImports] = useState<{id:string;fileName:string;status:string;okRows:number;totalRows:number}[]>([]);
+  const [nextCursor, setNextCursor] = useState<string|null>(null);
+  const refreshImports = useCallback(async (cursor?:string) => {
+    const data=await get<{data:typeof imports;nextCursor:string|null}>("/api/imports/personal"+(cursor?"?cursor="+encodeURIComponent(cursor):""));
+    setImports(previous=>cursor?[...previous,...data.data]:data.data);
+    setNextCursor(data.nextCursor);
+  },[get]);
   const [preview, setPreview] = useState<string[][]>([]);
   const [detectedDelimiter, setDetectedDelimiter] = useState<"," | ";" | null>(null);
   const isGlobalImport = true;
   const canUseBulkImport = sessionUser ? canBulkImportPersonal(sessionUser.role) : false;
+  useEffect(()=>{
+    // Load persisted external state after the role becomes available.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if(canUseBulkImport) void refreshImports().catch(()=>toast.error("No se pudieron consultar las importaciones"));
+  },[canUseBulkImport,refreshImports,toast]);
   const [creating, setCreating] = useState(false);
   const [newPersonal, setNewPersonal] = useState({
     ci: "",
@@ -110,6 +124,7 @@ export function ImportPage() {
   });
 
   const handleFile = useCallback((f: File | null) => {
+    setOperationId(crypto.randomUUID());
     setFile(f);
     setResult(null);
     setPreview([]);
@@ -148,15 +163,35 @@ export function ImportPage() {
       const rows = parsed.rows;
 
       const unidadNombre = isGlobalImport ? "GLOBAL" : getUnitName(unidadId);
-      const payload = { unidadId, unidadNombre, rows };
-      const res = await post<ImportResult>("/api/imports/personal", payload);
+      const payload = { unidadId, unidadNombre, rows, fileName:file.name, operationId };
+      let res = await post<ImportResult>("/api/imports/personal", payload);
       setResult(res);
+      while(res.status === "ready") {
+        res=await post<ImportResult>("/api/imports/personal",{importId:res.importId});
+        setResult(res);
+      }
+      await refreshImports();
       toast.success("Importación completada", `${res.okRows} registros exitosos, ${res.errorRows} errores`);
     } catch (err) {
       toast.error("Error", err instanceof Error ? err.message : "No se pudo importar");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function resumeImport(id:string) {
+    setBusy(true);
+    try {
+      let res=await get<ImportResult>("/api/imports/personal?importId="+encodeURIComponent(id));
+      setResult(res);
+      if(res.status==="staging") {toast.warning("Vuelva a seleccionar el mismo archivo para completar su preparación");return;}
+      while(res.status!=="confirmed"){
+        res=await post<ImportResult>("/api/imports/personal",{importId:id});setResult(res);
+      }
+      await refreshImports();
+      toast.success("Importación completada",res.okRows+" filas aplicadas en total");
+    }catch(error){toast.error("No se pudo continuar",error instanceof Error?error.message:"Error de importación");}
+    finally{setBusy(false);}
   }
 
   async function handleCreatePersonal() {
@@ -326,6 +361,11 @@ export function ImportPage() {
         </Card>
       )}
 
+      {canUseBulkImport && <Card className="p-5">
+        <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Importaciones de personal</h3><Button variant="ghost" onClick={()=>void refreshImports().catch(()=>toast.error("No se pudieron consultar las importaciones"))}>Actualizar</Button></div>
+        <div className="mt-3 space-y-2">{imports.map(item=><div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] py-2"><span>{item.fileName} · {item.okRows??0}/{item.totalRows} filas aplicadas</span><Button variant="outline" size="sm" loading={busy} onClick={()=>void resumeImport(item.id)}>{item.status==="confirmed"?"Ver resultado":"Continuar importación"}</Button></div>)}</div>
+        {nextCursor && <Button variant="ghost" onClick={()=>void refreshImports(nextCursor).catch(()=>toast.error("No se pudo cargar la página"))}>Ver más importaciones</Button>}
+      </Card>}
       <Card className="p-5">
         <h3 className="text-base font-bold text-[var(--navy-900)] mb-2">Nuevo Efectivo (Ingreso Individual)</h3>
         <p className="text-sm text-[var(--navy-500)] mb-4">Alta manual para personal incorporado al departamento.</p>

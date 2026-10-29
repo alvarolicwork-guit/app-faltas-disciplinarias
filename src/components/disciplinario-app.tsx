@@ -71,7 +71,7 @@ function SessionRouter() {
 
 function AppRouter() {
   const { sessionUser } = useAuth();
-  return <SessionRouter key={sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId || ""}` : "sin-sesion"} />;
+  return <SessionRouter key={sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId || ""}:${sessionUser.dataGeneration??0}` : "sin-sesion"} />;
 }
 
 export function DisciplinarioApp() {

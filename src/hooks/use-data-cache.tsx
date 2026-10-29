@@ -50,7 +50,7 @@ export function DataCacheProvider({ children }: { children: ReactNode }) {
   const generationRef = useRef(0);
 
   useEffect(() => {
-    const nextUserKey = sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId ?? ""}` : null;
+    const nextUserKey = sessionUser ? `${sessionUser.uid}:${sessionUser.role}:${sessionUser.unidadId ?? ""}:${sessionUser.dataGeneration??0}` : null;
     if (userKeyRef.current !== nextUserKey) {
       cacheRef.current.clear();
       generationRef.current++;

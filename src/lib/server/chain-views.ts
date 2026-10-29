@@ -4,8 +4,14 @@ import { boliviaToday, ChainMetadata, inspectChains, SanctionRow } from "@/lib/d
 /** Read compatibility for legacy rows; this function never writes or invents a missing origin. */
 export async function annotateSanctions(db: Firestore, rows: SanctionRow[]): Promise<Array<DocumentData & {id:string}>> {
   const people = [...new Set(rows.filter(r => r.estado === "registrada").map(r => String(r.personalId)))];
-  const snapshots = await Promise.all(people.map(person => db.collection("faltas").where("personalId", "==", person).get()));
-  const byPerson = new Map(snapshots.map((snap, i) => [people[i], new Map(inspectChains(snap.docs.map(d => ({ ...d.data(), id: d.id }))).map(node=>[node.id,node]))]));
+  // Batch people into indexed IN queries. A page still receives complete
+  // chains, while a report avoids one separate query per police officer.
+  const history:SanctionRow[]=[];
+  for(let i=0;i<people.length;i+=30){
+    const snap=await db.collection("faltas").where("personalId","in",people.slice(i,i+30)).get();
+    history.push(...snap.docs.map(d=>({...d.data(),id:d.id})));
+  }
+  const byPerson = new Map(people.map(person => [person, new Map(inspectChains(history.filter(row=>row.personalId===person)).map(node=>[node.id,node]))]));
   const today = boliviaToday();
   return rows.map(row => {
     if (row.estado !== "registrada") return { ...row, estadoPlazoCadena: "sin_efecto" };

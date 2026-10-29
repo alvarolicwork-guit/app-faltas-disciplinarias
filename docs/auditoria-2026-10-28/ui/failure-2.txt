@@ -1,0 +1,71 @@
+Control Disciplinario
+
+Sistema Institucional
+
+Comando Departamental de Policía
+Chuquisaca
+
+e2e-super@example.test
+
+super admin
+Dashboard
+Registro de Falta
+Personal
+Sanciones registradas
+Usuarios
+Unidades
+Importar Personal
+Reportes
+Auditoría
+Cancelaciones
+Cerrar sesión
+Informes de Auditoría
+
+e2e-super@example.test
+
+super admin
+
+E2
+Notificaciones de la app (1 sin leer)
+Informes de auditoría
+Informe
+Registro de sanciones
+Cancelaciones y sanciones sin efecto
+Mes
+Unidad
+Todas
+Unidad de prueba
+Generar informe
+Exportar CSV
+Imprimir
+
+Fechas de registro/resolución en America/La_Paz. 2 filas. Los rechazos no son sanciones sin efecto.
+
+Mes	Unidad	Registros	Sin efecto	Solicitudes	Ajustes
+2026-10	Unidad de prueba	0	1	1	0
+Mes / unidad	Funcionario / documento	Evento / estado	Autor / motivo	Acción
+2026-10
+Unidad de prueba	Cabo Persona Ficticia
+Acta-001/2026
+Actual: Art. 9 - Faltas leves con llamada de atencion verbal 1. Negligencia en el aseo personal, descuido en la limpieza del vestuario o uso incorrecto del uniforme.
+Original: Art. 9 - Faltas leves con llamada de atencion verbal 1. Negligencia en el aseo personal, descuido en la limpieza del vestuario o uso incorrecto del uniforme.
+Falta cometida: Art. 9 - Faltas leves con llamada de atencion verbal / 1. Negligencia en el aseo personal, descuido en la limpieza del vestuario o uso incorrecto del uniforme.
+Período para considerar la reincidencia: 2026-10-28 – 2027-10-28	Sanción sin efecto / Sin efecto
+28/10/2026, 12:40:22 p. m.	e2e-dept@example.test
+Error ficticio identificado para validar la cancelación
+
+2026-10
+Unidad de prueba	Cabo Persona Ficticia
+
+Actual:
+Original:
+Falta cometida:
+Período para considerar la reincidencia: –	Solicitud / Aprobada
+28/10/2026, 12:40:22 p. m.
+
+Resolución del administrador
+Sin dispensa registrada
+
+	e2e-dept@example.test
+Error ficticio identificado para validar la cancelación
+Error ficticio comprobado en validación

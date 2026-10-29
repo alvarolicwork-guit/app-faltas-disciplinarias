@@ -16,6 +16,7 @@ type RequestUser = {
   apellidos?: string;
   nombreCompleto?: string;
   mustChangePassword?: boolean;
+  dataGeneration?: number;
   token: DecodedIdToken;
 };
 
@@ -87,5 +88,6 @@ export async function getRequestUser(request: NextRequest): Promise<RequestUser 
     if (active.length !== 1 || active[0].id !== decodedToken.uid) return null;
   }
 
-  return mapUser(decodedToken.uid, decodedToken, data);
+  const maintenance = (await getAdminDb().collection("access_control").doc("maintenance").get()).data();
+  return { ...mapUser(decodedToken.uid, decodedToken, data), dataGeneration: Number(maintenance?.generation ?? 0) };
 }

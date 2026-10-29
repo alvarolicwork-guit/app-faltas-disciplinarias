@@ -1,0 +1,302 @@
+
+> app-faltas@0.1.0 test:domain
+> tsx --test src/lib/domain/sanction-policy.test.ts src/lib/domain/recurrence-chain.test.ts src/lib/domain/personal-search.test.ts src/lib/server/local-test-policy.test.ts
+
+TAP version 13
+# Subtest: Búsqueda por CI, tildes, campos incompletos y nombres en distinto orden
+ok 1 - Búsqueda por CI, tildes, campos incompletos y nombres en distinto orden
+  ---
+  duration_ms: 0.749
+  type: 'test'
+  ...
+# Subtest: Historial departamental permitido a roles de consulta global; unidad denegada
+ok 2 - Historial departamental permitido a roles de consulta global; unidad denegada
+  ---
+  duration_ms: 0.1419
+  type: 'test'
+  ...
+# Subtest: Seguimiento de solicitudes no concede resolución a roles de unidad
+ok 3 - Seguimiento de solicitudes no concede resolución a roles de unidad
+  ---
+  duration_ms: 0.1065
+  type: 'test'
+  ...
+# Subtest: A01: primera conducta inicia una base con fecha y códigos canónicos
+ok 4 - A01: primera conducta inicia una base con fecha y códigos canónicos
+  ---
+  duration_ms: 2.0828
+  type: 'test'
+  ...
+# Subtest: A02-A03: la misma conducta escala exactamente un nivel desde el último registro
+ok 5 - A02-A03: la misma conducta escala exactamente un nivel desde el último registro
+  ---
+  duration_ms: 0.4369
+  type: 'test'
+  ...
+# Subtest: A04-A05 R01: cadenas9/1 y9/2 alcanzan11/1 sin colisión
+ok 6 - A04-A05 R01: cadenas9/1 y9/2 alcanzan11/1 sin colisión
+  ---
+  duration_ms: 0.4089
+  type: 'test'
+  ...
+# Subtest: A06-A07: las conductas sustantivas10/X no son la conducta10/1
+ok 7 - A06-A07: las conductas sustantivas10/X no son la conducta10/1
+  ---
+  duration_ms: 0.1758
+  type: 'test'
+  ...
+# Subtest: A08: no se admite salto9→11 ni10/2→10/1
+ok 8 - A08: no se admite salto9→11 ni10/2→10/1
+  ---
+  duration_ms: 0.359
+  type: 'test'
+  ...
+# Subtest: A09 R02: la raíz9/1 identifica el11/1 final y remite, sin repetir escalón
+ok 9 - A09 R02: la raíz9/1 identifica el11/1 final y remite, sin repetir escalón
+  ---
+  duration_ms: 0.1436
+  type: 'test'
+  ...
+# Subtest: A15: día364 escala; días365/366 reinician; el último escalón no renueva
+ok 10 - A15: día364 escala; días365/366 reinician; el último escalón no renueva
+  ---
+  duration_ms: 0.175
+  type: 'test'
+  ...
+# Subtest: A16 R03: raíz vencida con descendiente reciente permite nueva9/X
+ok 11 - A16 R03: raíz vencida con descendiente reciente permite nueva9/X
+  ---
+  duration_ms: 0.1246
+  type: 'test'
+  ...
+# Subtest: A17: raíz10/X vencida permite nueva10/X
+ok 12 - A17: raíz10/X vencida permite nueva10/X
+  ---
+  duration_ms: 0.1801
+  type: 'test'
+  ...
+# Subtest: A18: fechas futuras, inválidas y medianoche en Bolivia
+ok 13 - A18: fechas futuras, inválidas y medianoche en Bolivia
+  ---
+  duration_ms: 11.1314
+  type: 'test'
+  ...
+# Subtest: A19-A20: referencia explícita permite mismo día; inserción anterior a registros exige revisión
+ok 14 - A19-A20: referencia explícita permite mismo día; inserción anterior a registros exige revisión
+  ---
+  duration_ms: 0.219
+  type: 'test'
+  ...
+# Subtest: A26-A37: bifurcación, huérfano terminal, ciclo e identidad cruzada se detectan
+ok 15 - A26-A37: bifurcación, huérfano terminal, ciclo e identidad cruzada se detectan
+  ---
+  duration_ms: 0.3568
+  type: 'test'
+  ...
+# Subtest: A37: referencia y metadatos alterados requieren revisión
+ok 16 - A37: referencia y metadatos alterados requieren revisión
+  ---
+  duration_ms: 0.1527
+  type: 'test'
+  ...
+# Subtest: A45: cada escalón conserva fecha de vencimiento de la raíz
+ok 17 - A45: cada escalón conserva fecha de vencimiento de la raíz
+  ---
+  duration_ms: 0.1141
+  type: 'test'
+  ...
+# Subtest: A46 R13: una cadena ya escrita después de vencer requiere revisión; no se extiende
+ok 18 - A46 R13: una cadena ya escrita después de vencer requiere revisión; no se extiende
+  ---
+  duration_ms: 0.0946
+  type: 'test'
+  ...
+# Subtest: A47: vencimiento independiente por conducta
+ok 19 - A47: vencimiento independiente por conducta
+  ---
+  duration_ms: 0.1682
+  type: 'test'
+  ...
+# Subtest: A48: cadenas sucesivas de la misma conducta no heredan niveles
+ok 20 - A48: cadenas sucesivas de la misma conducta no heredan niveles
+  ---
+  duration_ms: 0.162
+  type: 'test'
+  ...
+# Subtest: A50: una evaluación histórica dentro del plazo no depende del día actual
+ok 21 - A50: una evaluación histórica dentro del plazo no depende del día actual
+  ---
+  duration_ms: 0.0777
+  type: 'test'
+  ...
+# Subtest: A52: vencimiento no altera filas ni estado de sanciones
+ok 22 - A52: vencimiento no altera filas ni estado de sanciones
+  ---
+  duration_ms: 0.5823
+  type: 'test'
+  ...
+# Subtest: 365 días se mantienen en año bisiesto
+ok 23 - 365 días se mantienen en año bisiesto
+  ---
+  duration_ms: 0.0647
+  type: 'test'
+  ...
+# Subtest: A42: un historial mayor a100 registros no trunca la selección de la cadena
+ok 24 - A42: un historial mayor a100 registros no trunca la selección de la cadena
+  ---
+  duration_ms: 4.2534
+  type: 'test'
+  ...
+# Subtest: siete días: solo autor y unidad, frontera exacta excluida
+ok 25 - siete días: solo autor y unidad, frontera exacta excluida
+  ---
+  duration_ms: 0.7975
+  type: 'test'
+  ...
+# Subtest: cinco días: pendiente deja de bloquear exactamente al vencer
+ok 26 - cinco días: pendiente deja de bloquear exactamente al vencer
+  ---
+  duration_ms: 0.1244
+  type: 'test'
+  ...
+# Subtest: antecedentes vigentes esperan siete días y ausencia de solicitud
+ok 27 - antecedentes vigentes esperan siete días y ausencia de solicitud
+  ---
+  duration_ms: 10.9622
+  type: 'test'
+  ...
+# Subtest: rechazo expreso dispensa únicamente la espera del antecedente asociado
+ok 28 - rechazo expreso dispensa únicamente la espera del antecedente asociado
+  ---
+  duration_ms: 0.4009
+  type: 'test'
+  ...
+# Subtest: pendiente prevalece sobre rechazo previo incluso antes del séptimo día
+ok 29 - pendiente prevalece sobre rechazo previo incluso antes del séptimo día
+  ---
+  duration_ms: 0.1053
+  type: 'test'
+  ...
+# Subtest: vencimiento al día seis espera solo hasta siete; vencimiento al once no añade días
+ok 30 - vencimiento al día seis espera solo hasta siete; vencimiento al once no añade días
+  ---
+  duration_ms: 0.3308
+  type: 'test'
+  ...
+# Subtest: evidencia incompleta, tardía, futura o sin autoridad no habilita anticipadamente
+ok 31 - evidencia incompleta, tardía, futura o sin autoridad no habilita anticipadamente
+  ---
+  duration_ms: 0.9443
+  type: 'test'
+  ...
+# Subtest: rechazo no supera sin efecto ni revisión y la dispensa termina al cumplir siete días
+ok 32 - rechazo no supera sin efecto ni revisión y la dispensa termina al cumplir siete días
+  ---
+  duration_ms: 0.1027
+  type: 'test'
+  ...
+# Subtest: cancelar Art9: solo sus descendientes bajan un nivel y se enlazan
+ok 33 - cancelar Art9: solo sus descendientes bajan un nivel y se enlazan
+  ---
+  duration_ms: 1.7097
+  type: 'test'
+  ...
+# Subtest: cancelar Art10: Art11 pasa a Art10 con origen Art9
+ok 34 - cancelar Art10: Art11 pasa a Art10 con origen Art9
+  ---
+  duration_ms: 0.3776
+  type: 'test'
+  ...
+# Subtest: cancelar última sanción no modifica las anteriores
+ok 35 - cancelar última sanción no modifica las anteriores
+  ---
+  duration_ms: 0.0747
+  type: 'test'
+  ...
+# Subtest: cadenas cíclicas, incompletas o con salto no se rebajan inventando antecedentes
+ok 36 - cadenas cíclicas, incompletas o con salto no se rebajan inventando antecedentes
+  ---
+  duration_ms: 0.7803
+  type: 'test'
+  ...
+# Subtest: CSV con comas, comillas escapadas y multilínea
+ok 37 - CSV con comas, comillas escapadas y multilínea
+  ---
+  duration_ms: 0.193
+  type: 'test'
+  ...
+# Subtest: impresión y exportación no interpretan HTML/fórmulas
+ok 38 - impresión y exportación no interpretan HTML/fórmulas
+  ---
+  duration_ms: 0.1058
+  type: 'test'
+  ...
+# Subtest: agrupación mensual utiliza Bolivia
+ok 39 - agrupación mensual utiliza Bolivia
+  ---
+  duration_ms: 0.5421
+  type: 'test'
+  ...
+# Subtest: A54: cancelar raíz cuenta un nuevo año desde la sanción promovida a base
+ok 40 - A54: cancelar raíz cuenta un nuevo año desde la sanción promovida a base
+  ---
+  duration_ms: 0.2701
+  type: 'test'
+  ...
+# Subtest: A34: cancelaciones sucesivas vuelven a promover la base conservando historia
+ok 41 - A34: cancelaciones sucesivas vuelven a promover la base conservando historia
+  ---
+  duration_ms: 0.4174
+  type: 'test'
+  ...
+# Subtest: A33: cancelar la base10/X promueve11/1 a10/X y abre el año desde esa sanción
+ok 42 - A33: cancelar la base10/X promueve11/1 a10/X y abre el año desde esa sanción
+  ---
+  duration_ms: 0.1962
+  type: 'test'
+  ...
+# Subtest: A35-A53: otra conducta y un episodio posterior de la misma conducta permanecen intactos
+ok 43 - A35-A53: otra conducta y un episodio posterior de la misma conducta permanecen intactos
+  ---
+  duration_ms: 0.3257
+  type: 'test'
+  ...
+# Subtest: Una promoción que solapa otra cadena exige revisión, sin mezclar episodios
+ok 44 - Una promoción que solapa otra cadena exige revisión, sin mezclar episodios
+  ---
+  duration_ms: 0.2401
+  type: 'test'
+  ...
+# Subtest: Una hoja histórica inválida se puede dejar sin efecto sin retipificar otros registros
+ok 45 - Una hoja histórica inválida se puede dejar sin efecto sin retipificar otros registros
+  ---
+  duration_ms: 0.0546
+  type: 'test'
+  ...
+# Subtest: La excepción requiere desarrollo, proyecto demo y ambos emuladores locales
+ok 46 - La excepción requiere desarrollo, proyecto demo y ambos emuladores locales
+  ---
+  duration_ms: 0.5227
+  type: 'test'
+  ...
+# Subtest: Se omite solo la espera de registro; se conservan estado, fecha y solicitudes
+ok 47 - Se omite solo la espera de registro; se conservan estado, fecha y solicitudes
+  ---
+  duration_ms: 11.474
+  type: 'test'
+  ...
+# Subtest: La excepción no amplía el plazo de cancelación de siete días
+ok 48 - La excepción no amplía el plazo de cancelación de siete días
+  ---
+  duration_ms: 0.1206
+  type: 'test'
+  ...
+1..48
+# tests 48
+# suites 0
+# pass 48
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 712.4519

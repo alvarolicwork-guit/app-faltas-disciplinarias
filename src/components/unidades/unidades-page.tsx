@@ -18,18 +18,20 @@ export function UnidadesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUnidad, setEditingUnidad] = useState<Unidad | null>(null);
   const [formData, setFormData] = useState({ nombre: "" });
+  const [operationId, setOperationId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deletingUnidad, setDeletingUnidad] = useState<Unidad | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const filteredUnidades = unidades.filter(u => 
-    u.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredUnidades = unidades.filter(u =>
+    u.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.nombre.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleOpenCreate = () => {
+    setOperationId(crypto.randomUUID());
     setEditingUnidad(null);
     setFormData({ nombre: "" });
     setModalOpen(true);
@@ -56,7 +58,7 @@ export function UnidadesPage() {
         await patch("/api/unidades", { id: editingUnidad.id, nombre: formData.nombre });
         toast.success("Unidad actualizada");
       } else {
-        await post("/api/unidades", { nombre: formData.nombre });
+        await post("/api/unidades", { nombre: formData.nombre, operationId });
         toast.success("Unidad creada");
       }
       setModalOpen(false);

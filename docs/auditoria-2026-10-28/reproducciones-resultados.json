@@ -1,0 +1,123 @@
+{
+  "project": "demo-app-faltas",
+  "firestore": "127.0.0.1:8188",
+  "auth": "127.0.0.1:9198",
+  "observedAt": "2026-10-28T21:14:56.216Z",
+  "observations": [
+    {
+      "id": "A01",
+      "evidence": {
+        "api": 403,
+        "firestore": 200
+      }
+    },
+    {
+      "id": "A02",
+      "evidence": {
+        "api": 401,
+        "firestore": 200
+      }
+    },
+    {
+      "id": "A02b",
+      "evidence": {
+        "api": 401,
+        "firestore": 200
+      }
+    },
+    {
+      "id": "A03",
+      "evidence": {
+        "requested": 12,
+        "accepted": 12,
+        "distinctIds": 2,
+        "ids": [
+          "U-003",
+          "U-003",
+          "U-003",
+          "U-004",
+          "U-004",
+          "U-004",
+          "U-004",
+          "U-004",
+          "U-004",
+          "U-004",
+          "U-004",
+          "U-004"
+        ]
+      }
+    },
+    {
+      "id": "A04",
+      "evidence": {
+        "http": 500,
+        "persistedPeople": 1,
+        "importSummaryCreated": false
+      }
+    },
+    {
+      "id": "A05",
+      "evidence": {
+        "persistedStatus": "cerrada_extraordinaria",
+        "visibleInAvailableFilters": false
+      }
+    },
+    {
+      "id": "A06",
+      "evidence": {
+        "auditState": "pendiente",
+        "deadlineInPast": true
+      }
+    },
+    {
+      "id": "A07",
+      "evidence": {
+        "actualUnitIds": 1,
+        "reportUnitGroups": 2
+      }
+    },
+    {
+      "id": "A08",
+      "evidence": {
+        "instant": "2026-11-01T02:00:00.000Z",
+        "boliviaDate": "2026-10-31",
+        "sanctionDate": "2026-10-31",
+        "utcMonthAlgorithmIncludes": false
+      }
+    },
+    {
+      "id": "AUTH-MATRIX",
+      "evidence": {
+        "denied": 70,
+        "retiredOperations": 8
+      }
+    },
+    {
+      "id": "CONTROLS",
+      "evidence": {
+        "foreignUnitFiltered": true,
+        "globalHistoryDenied": true,
+        "operatorWriteDenied": true,
+        "blockedAndFirstChangeDenied": true
+      }
+    },
+    {
+      "id": "A09",
+      "evidence": {
+        "passwordChangeHttp": 200,
+        "mustChangePassword": false,
+        "refreshError": null
+      }
+    },
+    {
+      "id": "A10",
+      "evidence": {
+        "firstHttp": 500,
+        "retryHttp": 200,
+        "persistedSanctions": 2,
+        "reportedCreated": 1,
+        "reportedSkipped": 1
+      }
+    }
+  ]
+}

@@ -7,6 +7,8 @@ import { getRequestUser } from "@/lib/auth/request-user";
 import { USER_ROLES_UNIT_SCOPE } from "@/lib/domain/constants";
 import { parseFechaSancion } from "@/lib/faltas/reincidencia";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { statsCache } from "@/lib/server/stats-cache";
+import { boliviaDate } from "@/lib/domain/institutional-date";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,6 +21,8 @@ export async function GET(request: NextRequest) {
     const unidadId = userIsUnitScoped ? actor.unidadId : params.get("unidadId")?.trim();
     const fechaInicio = params.get("fechaInicio");
     const fechaFin = params.get("fechaFin");
+    const cache=await statsCache(db,{kind:"report",role:actor.role,unit:unidadId??"",fechaInicio,fechaFin,today:boliviaDate()});
+    if(cache.hit)return NextResponse.json(cache.hit);
 
     let query = db.collection("faltas").where("estado", "==", "registrada");
 
@@ -64,16 +68,24 @@ export async function GET(request: NextRequest) {
     const porArticulo = Array.from(artMap.entries()).map(([articulo, count]) => ({ articulo, count }));
 
     // By unit
-    const unitMap = new Map<string, number>();
+    const unitMap = new Map<string, {unidadId:string; unidadNombre:string; count:number}>();
     for (const f of allFaltas) {
       const name = String(f.unidadSancionNombre ?? f.unidadNombre ?? "Desconocida");
-      unitMap.set(name, (unitMap.get(name) ?? 0) + 1);
+      const id = String(f.unidadSancionId ?? f.unidadId ?? "sin_unidad");
+      const group = unitMap.get(id) ?? {unidadId:id, unidadNombre:name, count:0};
+      group.count++;
+      unitMap.set(id, group);
     }
-    const porUnidad = Array.from(unitMap.entries()).map(([unidadNombre, count]) => ({ unidadNombre, count }));
+    const unitIds = [...unitMap.keys()].filter(id => id !== "sin_unidad");
+    if (unitIds.length) {
+      const units = await db.getAll(...unitIds.map(id=>db.collection("unidades").doc(id)));
+      for (const unit of units) if (unit.exists) unitMap.get(unit.id)!.unidadNombre = String(unit.data()!.nombre);
+    }
+    const porUnidad = [...unitMap.values()];
 
     const periodo = `${fechaInicio ?? "inicio"} — ${fechaFin ?? "hoy"}`;
 
-    return NextResponse.json({
+    const data={
       periodo,
       totalFaltas,
       personasSancionadas:new Set(allFaltas.map(f=>f.personalId)).size,
@@ -86,7 +98,9 @@ export async function GET(request: NextRequest) {
       porArticulo,
       porConducta:statisticsByConduct(allFaltas),
       porUnidad,
-    });
+    };
+    await cache.save(data);
+    return NextResponse.json(data);
   } catch (error) {
     console.error("GET /api/reportes failed", {
       error,

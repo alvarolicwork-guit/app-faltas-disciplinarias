@@ -1,0 +1,84 @@
+Control Disciplinario
+
+Sistema Institucional
+
+Comando Departamental de Policía
+Chuquisaca
+
+registrador-e2e@example.test
+
+admin unidad
+Dashboard
+Registro de Falta
+Personal
+Sanciones registradas
+Reportes
+Solicitudes de cancelación
+
+UNIDAD
+
+Unidad de prueba
+
+Cerrar sesión
+Registro de Falta
+
+registrador-e2e@example.test
+
+admin unidad
+
+RE
+Notificaciones de la app (1 sin leer)
+Solicitud aprobada
+
+Error ficticio comprobado en validación
+
+28/10/2026, 12:40:22 p. m.Marcar leída
+
+Unidad operativa
+
+Unidad de prueba
+
+Seleccionar Efectivo
+Buscar
+
+Cabo Conductas Paralelas
+
+CI 12345000
+
+Seleccionado
+Datos de la Sanción
+Segunda reincidencia por la misma falta
+
+El funcionario ya tiene una primera reincidencia por esta misma falta. Corresponde registrar la segunda reincidencia: Art. 11, inc. 1.
+
+Falta cometida: Art. 9 - Faltas leves con llamada de atencion verbal / 2. No presentarse con el uniforme reglamentario previsto para los diferentes actos del servicio.
+
+Sanción que corresponde registrar: Art. 11 - Llamada de atencion escrita y arresto de 4 a 10 dias / 1. Reincidencia de una de las faltas del articulo 10 o de las del articulo 9.
+
+Sanción anterior relacionada: Documento ficticio e2e-y · 01/04/2026 · Unidad de prueba.
+
+Período para considerar la reincidencia: comienza el 01/02/2026 y vence el 01/02/2027.
+
+Ver sanciones relacionadas (2)
+Artículo de la falta cometida
+Seleccionar artículo
+Art. 9 - Faltas leves con llamada de atencion verbal
+Art. 10 - Llamada de atencion escrita y arresto de 1 a 3 dias
+Art. 11 - Llamada de atencion escrita y arresto de 4 a 10 dias
+Inciso de la falta cometida
+Seleccionar inciso
+1. Negligencia en el aseo personal, descuido en la limpieza del vestuario o uso incorrecto del uniforme.
+2. No presentarse con el uniforme reglamentario previsto para los diferentes actos del servicio.
+3. Omitir el saludo, no responder o hacerlo con desaire, vistiendo uniforme.
+4. No utilizar el marbete de identificacion personal en el uniforme.
+5. Ingresar a otras Unidades y Organismos Operativos sin identificarse ante el Oficial o Superior de Servicio Interno.
+6. Omitir el parte de cortesia al superior.
+7. No observar el horario establecido para el cumplimiento de sus funciones.
+8. Dejacion momentanea e injustificada de las funciones publicas policiales.
+9. No guardar el respeto y consideracion entre miembros de la institucion.
+10. Demostrar falta de cortesia con el publico.
+11. No identificarse a requerimiento del superior, estando de uniforme o de servicio.
+Fecha de sanción
+Número de memorándum/Acta
+Motivo disciplinario
+Registrar Sanción

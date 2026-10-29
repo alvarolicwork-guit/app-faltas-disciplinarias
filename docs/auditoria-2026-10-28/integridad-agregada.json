@@ -1,0 +1,22 @@
+{
+  "readOnly": true,
+  "checkedAt": "2026-10-28T16:36:04.581Z",
+  "counts": {
+    "personal": 1483,
+    "registry": 1483,
+    "sanctions": 179,
+    "units": 44
+  },
+  "issues": {
+    "missingRegistry": 0,
+    "registryWrongPerson": 0,
+    "orphanRegistry": 0,
+    "sanctionMissingUnit": 0,
+    "activeUnitUserWithoutActiveUnit": 0,
+    "affectedPersons": 2,
+    "chainReasons": {
+      "Cadenas de la misma conducta con plazos superpuestos": 2,
+      "La cadena tiene una bifurcación; requiere revisión": 3
+    }
+  }
+}

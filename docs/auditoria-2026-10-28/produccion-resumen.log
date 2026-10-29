@@ -1,0 +1,132 @@
+{
+  "checkedAt": "2026-10-28T16:36:05.431Z",
+  "readOnly": true,
+  "project": "control-disciplinario-comando",
+  "http": [
+    {
+      "path": "/",
+      "status": 200,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    },
+    {
+      "path": "/api/health",
+      "status": 200,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      },
+      "body": {
+        "ok": true,
+        "service": "app-faltas",
+        "revision": "2c55379adf28145a1c7c72837cb534911a86a707",
+        "timestamp": "2026-10-28T16:36:06.398Z"
+      }
+    },
+    {
+      "path": "/api/personal",
+      "status": 401,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    },
+    {
+      "path": "/api/faltas",
+      "status": 401,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    },
+    {
+      "path": "/api/users",
+      "status": 401,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    },
+    {
+      "path": "/api/auditoria",
+      "status": 401,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    },
+    {
+      "path": "/api/notificaciones",
+      "status": 401,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    },
+    {
+      "path": "/api/internal/expire-requests",
+      "status": 401,
+      "headers": {
+        "content-security-policy": null,
+        "x-frame-options": null,
+        "x-content-type-options": null,
+        "referrer-policy": null,
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "server": "Vercel"
+      }
+    }
+  ],
+  "rules": {
+    "status": 200,
+    "ruleset": "projects/control-disciplinario-comando/rulesets/61ab8b5b-445c-4d1b-81f0-3a3e547523c7",
+    "updated": "2026-10-27T18:40:24.558642Z",
+    "remoteSha256": "3263fb2b641cdbd21f0b4f7fdc797c01d1288589762c613935c84edd84b1490f",
+    "localSha256": "3263fb2b641cdbd21f0b4f7fdc797c01d1288589762c613935c84edd84b1490f",
+    "matchesLocal": true
+  },
+  "indexes": {
+    "status": 200,
+    "count": 27,
+    "states": [
+      "READY"
+    ]
+  }
+}

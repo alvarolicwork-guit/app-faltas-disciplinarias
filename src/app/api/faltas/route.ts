@@ -1,4 +1,6 @@
 import { annotateSanctions } from "@/lib/server/chain-views";
+import { queryPage } from "@/lib/server/query-page";
+import { touchStats } from "@/lib/server/stats-cache";
 import { ChainError, matchesDecision, newChainMetadata, snapshotChain } from "@/lib/domain/recurrence-chain";
 import { assertDecisionAvailable, conductForInput, evaluateInTransaction, publicDecision } from "@/lib/server/recurrence";
 import { canRequestCancellation, authorUid, cancellationDeadline } from "@/lib/domain/sanction-policy";
@@ -196,6 +198,7 @@ export async function POST(request: NextRequest) {
           fechaSancionIntentada: fechaSancionTs, estado: "bloqueada", actor: { uid: actor.uid, role: actor.role },
           motivoBloqueo: "decision_cadena", sancionSugerida: decision.sancion, createdAt: Timestamp.now() };
         tx.set(reincidenciaBloqueadaRef, blockedPayload);
+        touchStats(tx,adminDb);
         tx.set(auditRef, { actorUid: actor.uid, actorRole: actor.role, action: "block_reincidencia", entity: "reincidencia_bloqueada",
           entityId: reincidenciaBloqueadaRef.id, unidadId: unidadSancionId, before: null, after: blockedPayload, createdAt: Timestamp.now() });
         return { blocked: true as const, reincidenciaBloqueadaId: reincidenciaBloqueadaRef.id,
@@ -257,6 +260,7 @@ export async function POST(request: NextRequest) {
       };
 
       tx.set(faltaRef, faltaPayload);
+      touchStats(tx,adminDb);
       tx.update(confirmation.ref, { result: { faltaId: faltaRef.id }, consumedAt: Timestamp.now() });
       tx.set(auditRef, {
         actorUid: actor.uid,
@@ -457,10 +461,15 @@ export async function GET(request: NextRequest) {
 
     query = query.orderBy("fechaSancion", "desc");
 
-    const snap = await query.get();
     const textFilter = q?.trim().toLowerCase() ?? "";
-
-    const annotated = await annotateSanctions(adminDb, snap.docs.map(d=>({...d.data(),id:d.id})));
+    const matches=(row:DocumentData)=>{
+      if(articulo&&!sameArticulo(String(row.articulo??""),articulo))return false;
+      if(inciso&&incisoNumber(String(row.inciso??""))!==incisoNumber(inciso))return false;
+      return !textFilter||[row.nombreCompleto,row.ci,row.memorandum].some(value=>String(value??"").toLowerCase().includes(textFilter));
+    };
+    const sizeParam=request.nextUrl.searchParams.get("pageSize");
+    const page=sizeParam?await queryPage(adminDb,query,{collection:"faltas",size:Math.min(100,Math.max(1,Number(sizeParam)||50)),cursor:request.nextUrl.searchParams.get("cursor"),scope:{actor:actor.uid,unidad:scopedUnidadId??null,personalId:personalId??null,scope:scope??null,articulo:articulo??null,inciso:inciso??null,fechaInicio:fechaInicio??null,fechaFin:fechaFin??null,reincidencia:reincidencia??null,estado:estado??null,q:textFilter},matches}):{docs:(await query.get()).docs,nextCursor:null};
+    const annotated = await annotateSanctions(adminDb, page.docs.map(d=>({...d.data(),id:d.id})));
     const rows: Array<Record<string, unknown> & { id: string }> = annotated.map((item) => {
         return {
         ...item,
@@ -495,7 +504,7 @@ export async function GET(request: NextRequest) {
         );
       });
 
-    return NextResponse.json({ data }, { status: 200 });
+    return NextResponse.json({ data, nextCursor:page.nextCursor }, { status: 200 });
   } catch (error) {
     console.error("GET /api/faltas failed", {
       error,

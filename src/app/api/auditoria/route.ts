@@ -5,6 +5,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { boliviaMonth, csvCell, boliviaDateTime, auditEventLabel, auditStateLabel } from "@/lib/domain/audit-report";
 import { operationError } from "@/lib/server/operations";
 import { DocumentData, Timestamp } from "firebase-admin/firestore";
+import { effectiveRequest } from "@/lib/domain/sanction-policy";
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     const snap = await db.collection("faltas").get();
     const annotated = await annotateSanctions(db,snap.docs.map(d=>({...d.data(),id:d.id})));
     const rows: Record<string, unknown>[] = [];
-    function iso(v: Timestamp | undefined) { return v?.toDate?.().toISOString() ?? ""; }
+    function iso(v: Timestamp | string | undefined) { return typeof v === "string" ? v : v?.toDate?.().toISOString() ?? ""; }
     function add(id: string, r: DocumentData, kind: string) {
       const date = iso(kind === "registro" ? r.createdAt : r.anulacion?.fecha);
       if ((unit && r.unidadId !== unit) || (month && (!date || boliviaMonth(date) !== month))) return;
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (type === "cancelaciones") {
       const requests = await db.collection("solicitudes_eliminacion_falta").get();
       for (const d of requests.docs) {
-        const r = d.data();
+        const r = effectiveRequest(d.data()) as DocumentData;
         const date = iso(r.resolvedAt ?? r.createdAt);
         if ((unit && r.solicitanteUnidadId !== unit) || (month && (!date || boliviaMonth(date) !== month))) continue;
         rows.push({ id: d.id, faltaId: r.faltaId, evento: "solicitud", mes: date ? boliviaMonth(date) : "sin_fecha_verificable", fecha: date, unidadId: r.solicitanteUnidadId, unidad: r.solicitanteUnidadNombre, funcionario: r.faltaResumen?.nombreCompleto, estado: r.estado, solicitante: r.solicitadaPor?.email, actor: r.resolvedBy?.email ?? r.resolvedBy?.uid, motivo: r.motivo, motivoResolucion: r.motivoResolucion ?? "", causa: r.causaCierre ?? "", dispensaEspera: r.dispensaEspera === true ? "Se eliminó la espera restante" : "Sin dispensa registrada", solicitada: iso(r.createdAt), vence: iso(r.expiresAt) });

@@ -10,6 +10,9 @@ import { createPersonalSchema } from "@/lib/domain/schemas";
 import { ciKey } from "@/lib/domain/text-normalization";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { matchesPersonalSearch } from "@/lib/domain/personal-search";
+import { personalIndex } from "@/lib/domain/personal-index";
+import { assertCurrentActor, operationError } from "@/lib/server/operations";
+import { indexedPersonal } from "@/lib/server/personal-query";
 
 function unauthorized() {
   return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -33,6 +36,12 @@ export async function GET(request: NextRequest) {
     if (catalogo && actor.role === "operador_unidad") return forbidden();
     const unitId = unitScoped ? actor.unidadId : request.nextUrl.searchParams.get("unidadId");
     const q = request.nextUrl.searchParams.get("q") ?? "";
+    const limit = Math.min(300, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 50));
+    const indexReady = (await db.collection("access_control").doc("search_index").get()).data()?.version === 1;
+    if(indexReady && (catalogo || !unitId)) {
+      const result=await indexedPersonal(db,{q,limit,cursor:request.nextUrl.searchParams.get("cursor"),scope:actor.uid+":"+(catalogo?"catalogo":"global"),exactCI:request.nextUrl.searchParams.get("exactCI")});
+      return NextResponse.json({...result,data:result.data.map(r=>({id:r.id,ci:r.ci,grado:r.grado,nombres:r.nombres,apellidos:r.apellidos,nombreCompleto:r.nombreCompleto,sexo:r.sexo,estado:r.estado,transferRequired:false}))});
+    }
     let people;
     if (!catalogo && unitId) {
       const sanctions = await db.collection("faltas").where("unidadId", "==", unitId).get();
@@ -44,11 +53,10 @@ export async function GET(request: NextRequest) {
       people = (await db.collection("personal").get()).docs;
     }
     const rows = people.filter(d=>d.exists).map(d=>({ ...d.data(), id: d.id } as Record<string, unknown> & {id:string})).filter(r=>matchesPersonalSearch(r,q)).sort((a,b)=>String(a.nombreCompleto).localeCompare(String(b.nombreCompleto),"es"));
-    const limit = Math.min(300, Math.max(1, Number(request.nextUrl.searchParams.get("limit")) || 50));
     const offset = Math.max(0, Number(request.nextUrl.searchParams.get("offset")) || 0);
     const data = rows.slice(offset,offset+limit).map(r=>({id:r.id,ci:r.ci,grado:r.grado,nombres:r.nombres,apellidos:r.apellidos,nombreCompleto:r.nombreCompleto,sexo:r.sexo,estado:r.estado,transferRequired:false}));
     return NextResponse.json({data,total:rows.length,nextOffset:offset+limit<rows.length?offset+limit:null});
-  } catch { return NextResponse.json({error:"No se pudo consultar el padrón"},{status:500}); }
+  } catch(error) { return operationError(error); }
 }
 
 export async function POST(request: NextRequest) {
@@ -77,6 +85,7 @@ export async function POST(request: NextRequest) {
     const personalRef = adminDb.collection("personal").doc();
 
     const result = await adminDb.runTransaction(async (tx) => {
+      await assertCurrentActor(tx, adminDb, actor);
       const registrySnap = await tx.get(registryRef);
       if (registrySnap.exists) {
         throw new Error("CI_ALREADY_EXISTS");
@@ -103,7 +112,7 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       };
 
-      tx.set(personalRef, payload);
+      tx.set(personalRef, { ...payload, ...personalIndex(payload) });
       tx.set(registryRef, {
         ci: input.ci,
         personalId: personalRef.id,
@@ -130,6 +139,6 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "CI_ALREADY_EXISTS") {
       return badRequest("Ya existe personal con ese CI en el departamento");
     }
-    return NextResponse.json({ error: "No se pudo crear personal" }, { status: 500 });
+    return operationError(error);
   }
 }

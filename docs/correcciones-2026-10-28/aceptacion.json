@@ -1,0 +1,171 @@
+{
+  "project": "demo-app-faltas",
+  "observedAt": "2026-10-29T02:59:36.723Z",
+  "observations": [
+    {
+      "id": "A01",
+      "evidence": {
+        "api": 403,
+        "firestore": 403
+      }
+    },
+    {
+      "id": "A02",
+      "evidence": {
+        "api": 401,
+        "firestore": 403
+      }
+    },
+    {
+      "id": "A02b",
+      "evidence": {
+        "api": 401,
+        "firestore": 403
+      }
+    },
+    {
+      "id": "A03",
+      "evidence": {
+        "requested": 12,
+        "accepted": 12,
+        "distinctIds": 12,
+        "ids": [
+          "U-005",
+          "U-007",
+          "U-008",
+          "U-004",
+          "U-012",
+          "U-010",
+          "U-011",
+          "U-009",
+          "U-014",
+          "U-003",
+          "U-013",
+          "U-006"
+        ]
+      }
+    },
+    {
+      "id": "A04",
+      "evidence": {
+        "http": 400,
+        "persistedPeople": 0,
+        "importSummaryCreated": false
+      }
+    },
+    {
+      "id": "A05",
+      "evidence": {
+        "persistedStatus": "cerrada_extraordinaria",
+        "visibleInAvailableFilters": true
+      }
+    },
+    {
+      "id": "A06",
+      "evidence": {
+        "auditState": "rechazada",
+        "deadlineInPast": true
+      }
+    },
+    {
+      "id": "A07",
+      "evidence": {
+        "actualUnitIds": 1,
+        "reportUnitGroups": 1
+      }
+    },
+    {
+      "id": "A08",
+      "evidence": {
+        "instant": "2026-11-01T02:00:00.000Z",
+        "boliviaDate": "2026-10-31",
+        "sanctionDate": "2026-10-31",
+        "institutionalMonthIncludes": true
+      }
+    },
+    {
+      "id": "AUTH-MATRIX",
+      "evidence": {
+        "denied": 74,
+        "retiredOperations": 8
+      }
+    },
+    {
+      "id": "CONTROLS",
+      "evidence": {
+        "foreignUnitFiltered": true,
+        "globalHistoryDenied": true,
+        "operatorWriteDenied": true,
+        "blockedAndFirstChangeDenied": true
+      }
+    },
+    {
+      "id": "A09",
+      "evidence": {
+        "passwordChangeHttp": 200,
+        "mustChangePassword": false,
+        "refreshError": null
+      }
+    },
+    {
+      "id": "A10",
+      "evidence": {
+        "firstHttp": 500,
+        "retryHttp": 200,
+        "persistedSanctions": 2,
+        "reportedCreated": 2,
+        "reportedSkipped": 0
+      }
+    },
+    {
+      "id": "units-idempotency",
+      "evidence": {
+        "singleIdentity": true,
+        "legacyAssignmentIgnored": true
+      }
+    },
+    {
+      "id": "personal-import-resume",
+      "evidence": {
+        "applied": 151,
+        "duplicateRows": 0,
+        "reopened": true
+      }
+    },
+    {
+      "id": "search-load",
+      "evidence": {
+        "fixturePeople": 1500,
+        "pageSize": 30,
+        "candidateReads": 30,
+        "cursorDistinct": true,
+        "exactCiReads": 2
+      }
+    },
+    {
+      "id": "expiry-job",
+      "evidence": {
+        "firstExpired": 1,
+        "repeatExpired": 0
+      }
+    },
+    {
+      "id": "stats-cache",
+      "evidence": {
+        "cacheHit": true,
+        "invalidatedByMutation": true
+      }
+    },
+    {
+      "id": "reset-recovery",
+      "evidence": {
+        "runId": "reset_ccf5970c-454c-4469-81ac-f81fb31bfc13",
+        "deletedTestData": true,
+        "orphanRowsRemoved": true,
+        "usersPreserved": 6,
+        "unitsPreserved": 16,
+        "exportsDocuments": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+Control Disciplinario
+
+Sistema Institucional
+
+Comando Departamental de Policía
+Chuquisaca
+
+e2e-dept@example.test
+
+admin dpto
+Dashboard
+Registro de Falta
+Personal
+Sanciones registradas
+Usuarios
+Unidades
+Importar Personal
+Reportes
+Solicitudes de cancelación
+Cerrar sesión
+Dashboard
+
+e2e-dept@example.test
+
+admin dpto
+
+E2
+Notificaciones de la app (1 sin leer)
+
+Reincidencias registradas: 4. Personas con reincidencia: 2.
+
+Actualizar datos
+
+Total Sanciones
+
+7
+
+Este Mes
+
+0
+
+Solicitudes de cancelación pendientes
+
+0
+
+Ver solicitudes pendientes →
+
+Unidades Activas
+
+1
+
+Distribución por Artículo
+Art. 10 — Medias
+3
+Art. 9 — Leves
+2
+Art. 11 — Graves
+2
+Últimas Sanciones
+
+2026-09-01
+
+Art.11
+
+2026-05-01
+
+Art.11
+
+2026-04-01
+
+Art.10
+
+2026-03-01
+
+Art.10
+
+2026-02-01
+
+Art.9
+
+2026-01-01
+
+Art.9
+Unidades Policiales
+
+u-e2e
+
+Unidad de prueba
