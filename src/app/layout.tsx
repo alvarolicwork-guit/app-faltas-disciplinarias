@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   title: "Control Disciplinario — Sistema Institucional",
   description:
     "Registro y control de faltas disciplinarias multiunidad con trazabilidad, detección de reincidencia y auditoría completa.",
-  icons: { icon: "/favicon.ico" },
+  applicationName: "Control Disciplinario",
 };
 
 export default function RootLayout({
